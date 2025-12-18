@@ -188,6 +188,13 @@ function createAttacker(config, ws) {
     },
     async sendMessage() {
       // Attacker does not send its own chat; it only relays.
+    },
+    checkHandshake() {
+      const isComplete = clientConn && serverConn;
+      return {
+        complete: isComplete,
+        status: isComplete ? "MITM relay active - connections established" : (clientConn || serverConn ? "Partial connection..." : "Waiting for connections...")
+      };
     }
   };
 }

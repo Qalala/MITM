@@ -54,6 +54,9 @@ function updateDecryptionDisplay() {
 }
 
 function showRoleSections(role) {
+  // Hide role selection section once role is set
+  document.getElementById("role-section").style.display = "none";
+  
   // Hide all role-specific sections first
   document.getElementById("network-section").style.display = "none";
   document.getElementById("security-section").style.display = "none";
@@ -92,9 +95,6 @@ function showRoleSections(role) {
     // Hide Connect button for attacker
     connectBtn.style.display = "none";
   }
-  
-  // Keep role section visible for changing roles
-  document.getElementById("role-section").style.display = "block";
 }
 
 // Role selection is handled via the dropdown and setRoleBtn, no prompt needed
@@ -131,11 +131,15 @@ async function initInfo() {
     if (saved.role && ["sender", "receiver", "attacker"].includes(saved.role)) {
       roleSelect.value = saved.role;
       currentRole = saved.role;
+      // Show status section when role is restored
+      statusEl.style.display = "block";
       showRoleSections(currentRole);
       logLine(`Restored role: ${currentRole}`, "role-selected");
     } else {
       // Show only role selection window on startup
       document.getElementById("role-section").style.display = "block";
+      // Hide status initially when no role is set
+      statusEl.style.display = "none";
     }
   } catch (e) {
     localIpEl.textContent = "Unknown";
@@ -175,6 +179,19 @@ function ensureWs() {
         logLine(`→ SENT: ${msg.text}`, "message-sent");
       } else if (msg.type === "messageReceived") {
         logLine(`← RECEIVED: ${msg.text}`, "message-received");
+      } else if (msg.type === "handshakeStatus") {
+        // Update handshake status
+        handshakeComplete = msg.complete;
+        if (msg.complete) {
+          logLine(`✓ ${msg.status}`, "success");
+          statusEl.textContent = msg.status;
+        } else {
+          logLine(`⏳ ${msg.status}`, "role-selected");
+          // Only update status if it's not already showing a more specific message
+          if (!statusEl.textContent.includes("Handshake complete")) {
+            statusEl.textContent = msg.status;
+          }
+        }
       }
     } catch (e) {
       console.error(e);
@@ -195,6 +212,11 @@ setRoleBtn.onclick = () => {
   
   currentRole = role;
   handshakeComplete = false;
+  
+  // Show status section once role is set
+  statusEl.style.display = "block";
+  
+  // Hide role selection and show role-specific sections
   showRoleSections(role);
   
   // Update decryption display when role changes
@@ -285,11 +307,18 @@ connectBtn.onclick = () => {
 
 refreshBtn.onclick = () => {
   ensureWs();
-  discoverResults.innerHTML = "<div style='color: #eaeaea;'>Refreshing discovery...</div>";
-  const cfg = {
-    port: parseInt(document.getElementById("target-port").value, 10) || 12347
-  };
-  ws.send(JSON.stringify({ type: "discover", config: cfg }));
+  
+  // For sender role, refresh discovery
+  if (currentRole === "sender") {
+    discoverResults.innerHTML = "<div style='color: #eaeaea;'>Refreshing discovery...</div>";
+    const cfg = {
+      port: parseInt(document.getElementById("target-port").value, 10) || 12347
+    };
+    ws.send(JSON.stringify({ type: "discover", config: cfg }));
+  }
+  
+  // For all roles, check handshake status
+  ws.send(JSON.stringify({ type: "checkHandshake" }));
 };
 
 sendBtn.onclick = () => {

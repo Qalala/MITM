@@ -206,6 +206,13 @@ function createReceiver(config, ws) {
     },
     async sendMessage() {
       // Receiver does not send chat messages in this demo.
+    },
+    checkHandshake() {
+      const isComplete = conn && sessionKey;
+      return {
+        complete: isComplete,
+        status: isComplete ? "Handshake complete - encrypted" : (conn ? "Handshake in progress..." : "Waiting for connection...")
+      };
     }
   };
 }

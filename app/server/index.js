@@ -141,6 +141,23 @@ wss.on("connection", (ws) => {
           }
           break;
         }
+        case "checkHandshake": {
+          if (roleInstance && roleInstance.checkHandshake) {
+            const handshakeStatus = roleInstance.checkHandshake();
+            ws.send(JSON.stringify({ 
+              type: "handshakeStatus", 
+              complete: handshakeStatus.complete,
+              status: handshakeStatus.status 
+            }));
+          } else {
+            ws.send(JSON.stringify({ 
+              type: "handshakeStatus", 
+              complete: false,
+              status: "Role not configured" 
+            }));
+          }
+          break;
+        }
         default:
           ws.send(JSON.stringify({ type: "error", error: "Unknown command" }));
       }

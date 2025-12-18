@@ -261,6 +261,13 @@ function createSender(config, ws) {
       socket.write(encodeFrame(FRAME_TYPES.DATA, payload));
       logUi(ws, "sender", `SENT: ${text}`);
       sendUi(ws, { type: "messageSent", text });
+    },
+    checkHandshake() {
+      const isComplete = socket && handshakeDone && (sessionKey || sharedSecret);
+      return {
+        complete: isComplete,
+        status: isComplete ? "Handshake complete - encrypted" : (socket ? "Handshake in progress..." : "Not connected")
+      };
     }
   };
 }
