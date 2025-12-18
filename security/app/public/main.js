@@ -6,6 +6,8 @@ const chatLog = document.getElementById("chat-log");
 const sendBtn = document.getElementById("send-btn");
 const chatInput = document.getElementById("chat-input");
 const discoverBtn = document.getElementById("discover-btn");
+const refreshBtn = document.getElementById("refresh-btn");
+const connectBtn = document.getElementById("connect-btn");
 const discoverResults = document.getElementById("discover-results");
 
 let ws;
@@ -22,18 +24,33 @@ function logLine(text, className = "") {
 
 function updateDecryptionDisplay() {
   const decryptionDisplay = document.getElementById("decryption-mode-display");
-  const decryptionText = document.getElementById("decryption-mode-text");
-  const encMode = parseInt(document.getElementById("enc-mode").value, 10);
+  const decryptionMethodsList = document.getElementById("decryption-methods-list");
   
-  const modeNames = {
-    0: "Plaintext (None)",
-    1: "AES-GCM",
-    2: "AES-CBC + HMAC-SHA256",
-    3: "Diffie-Hellman"
-  };
+  if (currentRole !== "receiver") {
+    decryptionDisplay.style.display = "none";
+    return;
+  }
   
-  decryptionText.textContent = modeNames[encMode] || "Unknown";
-  decryptionDisplay.style.display = currentRole === "receiver" ? "block" : "none";
+  decryptionDisplay.style.display = "block";
+  
+  // Define decryption methods and which encryption they decrypt
+  const decryptionMethods = [
+    { name: "Plaintext Decryption", decrypts: ["0 - None (Plaintext)"] },
+    { name: "AES-GCM Decryption", decrypts: ["1 - AES-GCM"] },
+    { name: "AES-CBC + HMAC-SHA256 Decryption", decrypts: ["2 - AES-CBC + HMAC-SHA256"] },
+    { name: "Diffie-Hellman Decryption", decrypts: ["3 - Diffie-Hellman (demo)"] }
+  ];
+  
+  decryptionMethodsList.innerHTML = "";
+  decryptionMethods.forEach(method => {
+    const div = document.createElement("div");
+    div.style.marginBottom = "4px";
+    div.style.padding = "4px";
+    div.style.background = "#3d3d3d";
+    div.style.borderRadius = "4px";
+    div.innerHTML = `<strong>${method.name}</strong> <span style="color: #9e9e9e;">(decrypts: ${method.decrypts.join(", ")})</span>`;
+    decryptionMethodsList.appendChild(div);
+  });
 }
 
 function showRoleSections(role) {
@@ -51,6 +68,8 @@ function showRoleSections(role) {
     // Show chat input for sender
     document.getElementById("chat-input-row").style.display = "flex";
     document.getElementById("decryption-mode-display").style.display = "none";
+    // Show Connect button for sender
+    connectBtn.style.display = "inline-block";
   } else if (role === "receiver") {
     document.getElementById("network-section").style.display = "block";
     document.getElementById("security-section").style.display = "block";
@@ -59,6 +78,8 @@ function showRoleSections(role) {
     document.getElementById("chat-input-row").style.display = "none";
     // Show decryption mode display for receiver
     updateDecryptionDisplay();
+    // Hide Connect button for receiver (it listens, doesn't connect)
+    connectBtn.style.display = "none";
   } else if (role === "attacker") {
     document.getElementById("network-section").style.display = "block";
     // Attacker doesn't need security section - it just relays frames without decrypting
@@ -68,6 +89,8 @@ function showRoleSections(role) {
     // Hide chat input for attacker (read-only)
     document.getElementById("chat-input-row").style.display = "none";
     document.getElementById("decryption-mode-display").style.display = "none";
+    // Hide Connect button for attacker
+    connectBtn.style.display = "none";
   }
   
   // Keep role section visible for changing roles
@@ -90,7 +113,13 @@ async function initInfo() {
     document.getElementById("transport").value = saved.transport || "tcp";
     
     // Set up encryption mode change listener for decryption display
-    document.getElementById("enc-mode").addEventListener("change", updateDecryptionDisplay);
+    document.getElementById("enc-mode").addEventListener("change", () => {
+      updateDecryptionDisplay();
+      // Also update role config if receiver is active
+      if (currentRole === "receiver") {
+        setRoleBtn.click();
+      }
+    });
     
     // Hide all sections initially, show only role selection window
     document.getElementById("network-section").style.display = "none";
@@ -215,6 +244,54 @@ setRoleBtn.onclick = () => {
   );
 };
 
+connectBtn.onclick = () => {
+  ensureWs();
+  if (currentRole !== "sender") {
+    logLine("Only sender can connect", "error");
+    return;
+  }
+  
+  const targetIp = document.getElementById("target-ip").value.trim();
+  if (!targetIp) {
+    logLine("Please enter a target IP address", "error");
+    return;
+  }
+  
+  const port = parseInt(document.getElementById("target-port").value, 10) || 12347;
+  const transport = document.getElementById("transport").value;
+  const encMode = parseInt(document.getElementById("enc-mode").value, 10);
+  const kxMode = document.getElementById("kx-mode").value;
+  const psk = document.getElementById("psk-input").value;
+  const demo = document.getElementById("demo-mode").checked;
+  
+  handshakeComplete = false;
+  logLine(`Connecting to ${targetIp}:${port}...`, "role-selected");
+  
+  ws.send(
+    JSON.stringify({
+      type: "connect",
+      config: {
+        targetIp,
+        port,
+        transport,
+        encMode,
+        kxMode,
+        psk,
+        demo
+      }
+    })
+  );
+};
+
+refreshBtn.onclick = () => {
+  ensureWs();
+  discoverResults.innerHTML = "<div style='color: #eaeaea;'>Refreshing discovery...</div>";
+  const cfg = {
+    port: parseInt(document.getElementById("target-port").value, 10) || 12347
+  };
+  ws.send(JSON.stringify({ type: "discover", config: cfg }));
+};
+
 sendBtn.onclick = () => {
   ensureWs();
   const text = chatInput.value;
@@ -237,7 +314,7 @@ sendBtn.onclick = () => {
 function displayDiscoveryResults(results) {
   discoverResults.innerHTML = "";
   if (!results || results.length === 0) {
-    discoverResults.textContent = "No devices found. Make sure other devices have set their roles and are on the same network.";
+    discoverResults.innerHTML = "<div style='color: #eaeaea;'>No devices found. Make sure other devices have set their roles and are on the same network.</div>";
     return;
   }
   
@@ -245,6 +322,7 @@ function displayDiscoveryResults(results) {
   title.textContent = `Found ${results.length} device(s):`;
   title.style.marginBottom = "8px";
   title.style.fontWeight = "bold";
+  title.style.color = "#eaeaea";
   discoverResults.appendChild(title);
   
   results.forEach(result => {
@@ -256,8 +334,9 @@ function displayDiscoveryResults(results) {
       div.style.padding = "4px";
       div.style.cursor = "pointer";
       div.style.marginBottom = "4px";
-      div.style.borderBottom = "1px solid #333";
-      div.onmouseover = () => { div.style.background = "#333"; };
+      div.style.borderBottom = "1px solid #555";
+      div.style.color = "#eaeaea";
+      div.onmouseover = () => { div.style.background = "#3d3d3d"; };
       div.onmouseout = () => { div.style.background = "transparent"; };
       
       const roleSpan = document.createElement("span");
@@ -290,8 +369,11 @@ function displayDiscoveryResults(results) {
 
 discoverBtn.onclick = () => {
   ensureWs();
-  discoverResults.innerHTML = "<div>Discovering on LAN...</div>";
-  ws.send(JSON.stringify({ type: "discover" }));
+  discoverResults.innerHTML = "<div style='color: #eaeaea;'>Discovering on LAN...</div>";
+  const cfg = {
+    port: parseInt(document.getElementById("target-port").value, 10) || 12347
+  };
+  ws.send(JSON.stringify({ type: "discover", config: cfg }));
 };
 
 initInfo();

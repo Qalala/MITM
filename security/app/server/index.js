@@ -120,6 +120,19 @@ wss.on("connection", (ws) => {
           );
           break;
         }
+        case "connect": {
+          if (currentRole !== "sender") {
+            ws.send(JSON.stringify({ type: "error", error: "Only sender can connect" }));
+            break;
+          }
+          if (!roleInstance || !roleInstance.connect) {
+            ws.send(JSON.stringify({ type: "error", error: "Role not configured. Please set role first." }));
+            break;
+          }
+          const cfg = msg.config || {};
+          await roleInstance.connect(cfg);
+          break;
+        }
         case "sendMessage": {
           if (roleInstance && roleInstance.sendMessage) {
             await roleInstance.sendMessage(msg.text || "");

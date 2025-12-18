@@ -8,3 +8,6 @@
 [2025-12-18T16:51:25.642Z] [receiver] Receiver listening on 0.0.0.0:12347 (TCP)
 [2025-12-18T16:51:27.960Z] [receiver] Receiver stopped and sockets closed
 [2025-12-18T17:09:34.739Z] [receiver] Receiver listening on 0.0.0.0:12347 (TCP)
+[2025-12-18T17:42:33.834Z] [receiver] Receiver listening on 0.0.0.0:12347 (TCP)
+[2025-12-18T17:42:38.468Z] [receiver] Client connected, starting handshake
+[2025-12-18T17:42:38.470Z] [receiver] Mode mismatch or downgrade attempt detected
