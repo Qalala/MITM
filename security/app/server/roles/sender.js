@@ -31,28 +31,9 @@ function createSender(config, ws) {
   let sessionKey = null;
   let sharedSecret = null;
   let seqOut = 0;
-
-  (async () => {
-    if (transport === "udp-broadcast") {
-      logUi(
-        ws,
-        "sender",
-        "UDP broadcast mode is handled by separate script (optional demo); TCP sender active."
-      );
-      return;
-    }
-    try {
-      socket = await createTcpClient(targetIp, port);
-      logUi(ws, "sender", `Connected to ${targetIp}:${port}, starting handshake`);
-      await doHandshake();
-      listenForFrames().catch((e) =>
-        logUi(ws, "sender", `Background receive error: ${e.message}`)
-      );
-    } catch (e) {
-      logUi(ws, "sender", `Failed to connect: ${e.message}`);
-      sendUi(ws, { type: "error", error: e.message });
-    }
-  })();
+  
+  // Store config for later connection
+  let storedConfig = { targetIp, port, transport, encMode, kxMode, psk, demo };
 
   async function doHandshake() {
     const hello = buildHello("sender", encMode, kxMode, demo);
@@ -107,8 +88,8 @@ function createSender(config, ws) {
     cleanup();
   }
 
-  function buildDataPayload(text) {
-    if (encMode === ENC_MODES.PLAINTEXT) {
+  function buildDataPayload(text, useEncMode = encMode) {
+    if (useEncMode === ENC_MODES.PLAINTEXT) {
       return Buffer.from(JSON.stringify({ text }), "utf8");
     }
 
@@ -119,7 +100,7 @@ function createSender(config, ws) {
     const key = sessionKey || sharedSecret;
     const pt = Buffer.from(text, "utf8");
 
-    if (encMode === ENC_MODES.AES_GCM) {
+    if (useEncMode === ENC_MODES.AES_GCM) {
       const nonce = generateNonce();
       const { ciphertext, tag } = encryptGcm(key, nonce, pt, aad);
       return Buffer.from(
@@ -133,7 +114,7 @@ function createSender(config, ws) {
       );
     }
 
-    if (encMode === ENC_MODES.AES_CBC_HMAC) {
+    if (useEncMode === ENC_MODES.AES_CBC_HMAC) {
       const iv = generateIv();
       const encKey = key.slice(0, 32);
       const macKey = key.slice(32, 64);
@@ -164,9 +145,105 @@ function createSender(config, ws) {
     logUi(ws, "sender", "Sender stopped and socket closed");
   }
 
+  async function connect(connectConfig) {
+    // Update config if provided
+    if (connectConfig) {
+      if (connectConfig.targetIp) targetIp = connectConfig.targetIp;
+      if (connectConfig.port) port = connectConfig.port;
+      if (connectConfig.transport) transport = connectConfig.transport;
+      if (connectConfig.encMode !== undefined) encMode = Number(connectConfig.encMode);
+      if (connectConfig.kxMode) kxMode = connectConfig.kxMode;
+      if (connectConfig.psk) psk = Buffer.from(connectConfig.psk);
+      if (connectConfig.demo !== undefined) demo = !!connectConfig.demo;
+      
+      // Update stored config
+      storedConfig = { targetIp, port, transport, encMode, kxMode, psk, demo };
+    }
+    
+    const connectTargetIp = targetIp;
+    const connectPort = port;
+    const connectTransport = transport;
+    const connectEncMode = encMode;
+    const connectKxMode = kxMode;
+    const connectPsk = psk;
+    const connectDemo = demo;
+    
+    // Clean up existing connection if any
+    if (socket) {
+      cleanup();
+    }
+    
+    handshakeDone = false;
+    running = true;
+    
+    if (connectTransport === "udp-broadcast") {
+      logUi(
+        ws,
+        "sender",
+        "UDP broadcast mode is handled by separate script (optional demo); TCP sender active."
+      );
+      return;
+    }
+    
+    try {
+      socket = await createTcpClient(connectTargetIp, connectPort);
+      logUi(ws, "sender", `Connected to ${connectTargetIp}:${connectPort}, starting handshake`);
+      
+      // Use connect config for handshake
+      const hello = buildHello("sender", connectEncMode, connectKxMode, connectDemo);
+      socket.write(encodeFrame(FRAME_TYPES.HELLO, hello));
+
+      const frameIter = decodeFrames(socket);
+      const negotiate = await frameIter.next();
+      if (negotiate.done || negotiate.value.type !== FRAME_TYPES.NEGOTIATE) {
+        throw new Error("Expected NEGOTIATE frame");
+      }
+      const nego = JSON.parse(negotiate.value.payload.toString("utf8"));
+      if (nego.encMode !== connectEncMode || nego.kxMode !== connectKxMode) {
+        throw new Error("Receiver refused parameters (downgrade prevention)");
+      }
+
+      const kx = await frameIter.next();
+      if (kx.done || kx.value.type !== FRAME_TYPES.KEY_EXCHANGE) {
+        throw new Error("Expected KEY_EXCHANGE from receiver");
+      }
+
+      const { responsePayload, stateUpdate } = senderProcessKeyExchange(
+        connectEncMode,
+        connectKxMode,
+        kx.value.payload,
+        { psk: connectPsk }
+      );
+      if (responsePayload) {
+        socket.write(encodeFrame(FRAME_TYPES.KEY_EXCHANGE, responsePayload));
+      }
+      sessionKey = stateUpdate.sessionKey;
+      sharedSecret = stateUpdate.sharedSecret;
+
+      const ack = await frameIter.next();
+      if (ack.done || ack.value.type !== FRAME_TYPES.ACK) {
+        throw new Error("Expected ACK after key exchange");
+      }
+      handshakeDone = true;
+      logUi(ws, "sender", "Handshake complete, ready to send data");
+      sendUi(ws, { type: "status", status: "Handshake complete - encrypted" });
+      
+      listenForFrames().catch((e) =>
+        logUi(ws, "sender", `Background receive error: ${e.message}`)
+      );
+    } catch (e) {
+      logUi(ws, "sender", `Failed to connect: ${e.message}`);
+      sendUi(ws, { type: "error", error: e.message });
+      cleanup();
+    }
+  }
+
   return {
     async stop() {
       cleanup();
+    },
+    async connect(cfg) {
+      await connect(cfg);
     },
     async sendMessage(text) {
       if (transport === "udp-broadcast") {
@@ -177,7 +254,7 @@ function createSender(config, ws) {
         return;
       }
       if (!socket || !handshakeDone) {
-        sendUi(ws, { type: "error", error: "Handshake not complete" });
+        sendUi(ws, { type: "error", error: "Handshake not complete. Wait for connection..." });
         return;
       }
       const payload = buildDataPayload(text);
