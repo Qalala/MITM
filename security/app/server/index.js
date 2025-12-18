@@ -7,7 +7,7 @@ const { log } = require("../../core/logging/logger");
 const { createSender } = require("./roles/sender");
 const { createReceiver } = require("./roles/receiver");
 const { createAttacker } = require("./roles/attacker");
-const { startDiscovery, stopDiscovery, sendDiscoveryPing } = require("./lan/discovery");
+const { startDiscovery, stopDiscovery, sendDiscoveryPing, broadcastPresence } = require("./lan/discovery");
 
 const app = express();
 const server = http.createServer(app);
@@ -41,9 +41,18 @@ app.get("/api/info", (req, res) => {
 let currentRole = null;
 let roleInstance = null;
 let discovery = null;
+let broadcastInterval = null;
 
 wss.on("connection", (ws) => {
   log("ui", "WebSocket client connected");
+  ws.on("close", () => {
+    // Stop broadcasting when client disconnects
+    if (broadcastInterval) {
+      clearInterval(broadcastInterval);
+      broadcastInterval = null;
+    }
+  });
+
   ws.on("message", async (data) => {
     try {
       const msg = JSON.parse(data.toString());
@@ -53,10 +62,25 @@ wss.on("connection", (ws) => {
           if (roleInstance && roleInstance.stop) {
             await roleInstance.stop();
           }
-          if (!discovery) {
-            discovery = startDiscovery();
+          
+          // Stop previous broadcast interval
+          if (broadcastInterval) {
+            clearInterval(broadcastInterval);
+            broadcastInterval = null;
           }
+          
           const cfg = msg.config || {};
+          const port = cfg.port || 12347;
+          
+          // Start or restart discovery with current role/port
+          if (discovery && discovery.socket) {
+            // Update existing discovery with new role/port
+            discovery.currentRole = currentRole;
+            discovery.currentPort = port;
+          } else {
+            discovery = startDiscovery(currentRole, port);
+          }
+          
           if (currentRole === "sender") {
             roleInstance = createSender(cfg, ws);
           } else if (currentRole === "receiver") {
@@ -66,18 +90,32 @@ wss.on("connection", (ws) => {
           } else {
             throw new Error("Unknown role");
           }
+          
+          // Broadcast presence immediately and then periodically
+          broadcastPresence(discovery, currentRole, port);
+          broadcastInterval = setInterval(() => {
+            broadcastPresence(discovery, currentRole, port);
+          }, 3000); // Broadcast every 3 seconds
+          
           ws.send(JSON.stringify({ type: "status", status: `Role set to ${currentRole}` }));
           break;
         }
         case "discover": {
+          const cfg = msg.config || {};
+          const port = cfg.port || 12347;
+          
           if (!discovery) {
-            discovery = startDiscovery();
+            discovery = startDiscovery(currentRole, port);
+          }
+          // Clear previous results before new discovery
+          if (discovery.peers) {
+            discovery.peers.clear();
           }
           const results = await sendDiscoveryPing(discovery);
           ws.send(
             JSON.stringify({
-              type: "log",
-              message: `Discovery results: ${results.join(", ") || "none"}`
+              type: "discoveryResults",
+              results: results.length > 0 ? results : []
             })
           );
           break;

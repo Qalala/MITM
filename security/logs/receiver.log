@@ -5,3 +5,6 @@
 [2025-12-18T15:20:39.413Z] [receiver] Connection error: Premature close
 [2025-12-18T16:36:27.835Z] [receiver] Receiver listening on 0.0.0.0:12347 (TCP)
 [2025-12-18T16:36:34.234Z] [receiver] Receiver stopped and sockets closed
+[2025-12-18T16:51:25.642Z] [receiver] Receiver listening on 0.0.0.0:12347 (TCP)
+[2025-12-18T16:51:27.960Z] [receiver] Receiver stopped and sockets closed
+[2025-12-18T17:09:34.739Z] [receiver] Receiver listening on 0.0.0.0:12347 (TCP)

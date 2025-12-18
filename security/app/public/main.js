@@ -20,6 +20,22 @@ function logLine(text, className = "") {
   chatLog.scrollTop = chatLog.scrollHeight;
 }
 
+function updateDecryptionDisplay() {
+  const decryptionDisplay = document.getElementById("decryption-mode-display");
+  const decryptionText = document.getElementById("decryption-mode-text");
+  const encMode = parseInt(document.getElementById("enc-mode").value, 10);
+  
+  const modeNames = {
+    0: "Plaintext (None)",
+    1: "AES-GCM",
+    2: "AES-CBC + HMAC-SHA256",
+    3: "Diffie-Hellman"
+  };
+  
+  decryptionText.textContent = modeNames[encMode] || "Unknown";
+  decryptionDisplay.style.display = currentRole === "receiver" ? "block" : "none";
+}
+
 function showRoleSections(role) {
   // Hide all role-specific sections first
   document.getElementById("network-section").style.display = "none";
@@ -34,12 +50,15 @@ function showRoleSections(role) {
     document.getElementById("chat-section").style.display = "block";
     // Show chat input for sender
     document.getElementById("chat-input-row").style.display = "flex";
+    document.getElementById("decryption-mode-display").style.display = "none";
   } else if (role === "receiver") {
     document.getElementById("network-section").style.display = "block";
     document.getElementById("security-section").style.display = "block";
     document.getElementById("chat-section").style.display = "block";
     // Hide chat input for receiver (read-only)
     document.getElementById("chat-input-row").style.display = "none";
+    // Show decryption mode display for receiver
+    updateDecryptionDisplay();
   } else if (role === "attacker") {
     document.getElementById("network-section").style.display = "block";
     // Attacker doesn't need security section - it just relays frames without decrypting
@@ -48,6 +67,7 @@ function showRoleSections(role) {
     document.getElementById("attacker-section").style.display = "block";
     // Hide chat input for attacker (read-only)
     document.getElementById("chat-input-row").style.display = "none";
+    document.getElementById("decryption-mode-display").style.display = "none";
   }
   
   // Keep role section visible for changing roles
@@ -68,6 +88,9 @@ async function initInfo() {
     document.getElementById("kx-mode").value = saved.kxMode || "psk";
     document.getElementById("psk-input").value = saved.psk || "";
     document.getElementById("transport").value = saved.transport || "tcp";
+    
+    // Set up encryption mode change listener for decryption display
+    document.getElementById("enc-mode").addEventListener("change", updateDecryptionDisplay);
     
     // Hide all sections initially, show only role selection window
     document.getElementById("network-section").style.display = "none";
@@ -110,6 +133,8 @@ function ensureWs() {
         }
       } else if (msg.type === "log") {
         logLine(msg.message);
+      } else if (msg.type === "discoveryResults") {
+        displayDiscoveryResults(msg.results);
       } else if (msg.type === "error") {
         statusEl.textContent = "Error: " + msg.error;
         logLine("ERROR: " + msg.error, "error");
@@ -142,6 +167,11 @@ setRoleBtn.onclick = () => {
   currentRole = role;
   handshakeComplete = false;
   showRoleSections(role);
+  
+  // Update decryption display when role changes
+  if (role === "receiver") {
+    updateDecryptionDisplay();
+  }
   
   const targetIp = document.getElementById("target-ip").value.trim();
   const port = parseInt(document.getElementById("target-port").value, 10) || 12347;
@@ -204,9 +234,63 @@ sendBtn.onclick = () => {
   chatInput.value = "";
 };
 
+function displayDiscoveryResults(results) {
+  discoverResults.innerHTML = "";
+  if (!results || results.length === 0) {
+    discoverResults.textContent = "No devices found. Make sure other devices have set their roles and are on the same network.";
+    return;
+  }
+  
+  const title = document.createElement("div");
+  title.textContent = `Found ${results.length} device(s):`;
+  title.style.marginBottom = "8px";
+  title.style.fontWeight = "bold";
+  discoverResults.appendChild(title);
+  
+  results.forEach(result => {
+    // Parse result format: "role@ip:port"
+    const match = result.match(/^([^@]+)@(.+):(\d+)$/);
+    if (match) {
+      const [, role, ip, port] = match;
+      const div = document.createElement("div");
+      div.style.padding = "4px";
+      div.style.cursor = "pointer";
+      div.style.marginBottom = "4px";
+      div.style.borderBottom = "1px solid #333";
+      div.onmouseover = () => { div.style.background = "#333"; };
+      div.onmouseout = () => { div.style.background = "transparent"; };
+      
+      const roleSpan = document.createElement("span");
+      roleSpan.textContent = role.toUpperCase() + ": ";
+      roleSpan.style.color = "#4a9eff";
+      roleSpan.style.fontWeight = "bold";
+      
+      const ipSpan = document.createElement("span");
+      ipSpan.textContent = ip + ":" + port;
+      ipSpan.style.color = "#4caf50";
+      
+      div.appendChild(roleSpan);
+      div.appendChild(ipSpan);
+      
+      div.onclick = () => {
+        document.getElementById("target-ip").value = ip;
+        logLine(`Selected discovered device: ${role} at ${ip}:${port}`, "success");
+      };
+      
+      discoverResults.appendChild(div);
+    } else {
+      // Fallback for unexpected format
+      const div = document.createElement("div");
+      div.textContent = result;
+      div.style.padding = "4px";
+      discoverResults.appendChild(div);
+    }
+  });
+}
+
 discoverBtn.onclick = () => {
   ensureWs();
-  discoverResults.textContent = "Discovering on LAN...";
+  discoverResults.innerHTML = "<div>Discovering on LAN...</div>";
   ws.send(JSON.stringify({ type: "discover" }));
 };
 

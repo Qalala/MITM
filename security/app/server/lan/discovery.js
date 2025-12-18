@@ -16,7 +16,7 @@ function getLocalIp() {
   return "127.0.0.1";
 }
 
-function startDiscovery() {
+function startDiscovery(currentRole, currentPort) {
   const socket = dgram.createSocket("udp4");
   socket.bind(DISCOVERY_PORT, () => {
     socket.setBroadcast(true);
@@ -26,16 +26,23 @@ function startDiscovery() {
   socket.on("message", (msg, rinfo) => {
     try {
       const obj = JSON.parse(msg.toString("utf8"));
-      if (obj.magic === MAGIC && obj.ip && obj.role) {
-        const key = `${obj.role}@${rinfo.address}:${obj.port}`;
-        peers.add(key);
+      if (obj.magic === MAGIC) {
+        // Handle probe request - respond with our presence
+        if (obj.probe && currentRole && currentPort) {
+          broadcastPresence({ socket }, currentRole, currentPort);
+        }
+        // Handle presence announcement
+        if (obj.ip && obj.role && !obj.probe) {
+          const key = `${obj.role}@${rinfo.address}:${obj.port}`;
+          peers.add(key);
+        }
       }
     } catch {
       // ignore
     }
   });
 
-  return { socket, peers };
+  return { socket, peers, currentRole, currentPort };
 }
 
 function stopDiscovery(state) {
@@ -48,22 +55,40 @@ function stopDiscovery(state) {
 }
 
 function broadcastPresence(state, role, mainPort) {
-  if (!state) return;
+  if (!state || !state.socket) return;
   const msg = Buffer.from(
     JSON.stringify({ magic: MAGIC, role, ip: getLocalIp(), port: mainPort }),
     "utf8"
   );
-  state.socket.send(msg, 0, msg.length, DISCOVERY_PORT, "255.255.255.255");
+  state.socket.send(msg, 0, msg.length, DISCOVERY_PORT, "255.255.255.255", (err) => {
+    if (err) {
+      // Silently ignore broadcast errors (may fail on some networks)
+    }
+  });
+  
+  // Also update the state with current role/port for probe responses
+  if (state) {
+    state.currentRole = role;
+    state.currentPort = mainPort;
+  }
 }
 
 async function sendDiscoveryPing(state) {
-  if (!state) return [];
+  if (!state || !state.socket) return [];
+  
+  // Clear previous results
+  if (state.peers) {
+    state.peers.clear();
+  }
+  
   const msg = Buffer.from(
     JSON.stringify({ magic: MAGIC, probe: true, ip: getLocalIp() }),
     "utf8"
   );
   state.socket.send(msg, 0, msg.length, DISCOVERY_PORT, "255.255.255.255");
-  await new Promise((r) => setTimeout(r, 500));
+  
+  // Wait longer for responses (devices need time to respond to probe)
+  await new Promise((r) => setTimeout(r, 1500));
   return Array.from(state.peers.values());
 }
 
