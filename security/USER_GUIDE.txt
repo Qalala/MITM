@@ -29,12 +29,12 @@ STEP 1: Start the Server
 
 STEP 2: Select Your Role
 -------------------------
-When the page loads, you will be prompted to select a role:
-- Type "sender" for Sender role
-- Type "receiver" for Receiver role  
-- Type "attacker" for Attacker (MITM) role
+When the page loads, the role selection window will be displayed.
 
-After selecting a role, only the relevant sections for that role will be displayed.
+After selecting a role and clicking "Set Role", only the relevant sections for that role will be displayed:
+- Sender: Role Selection, Network Setup, Security, Chat
+- Receiver: Role Selection, Network Setup, Security, Chat (read-only)
+- Attacker: Role Selection, Network Setup, Chat (read-only), Attacker Controls
 
 ================================================================================
 2. ROLE SELECTION SECTION
@@ -54,7 +54,7 @@ Components:
   * Usage: After selecting role and configuring settings, click this button
   * Note: This will start/restart the role with your current settings
 
-IMPORTANT: You must select a role on startup. The application will prompt you.
+IMPORTANT: On startup, only the role selection window is shown. Select a role and click "Set Role" to display role-specific components.
 
 ================================================================================
 3. SENDER ROLE - COMPLETE GUIDE
@@ -300,7 +300,15 @@ WORKFLOW FOR RECEIVER:
 5. ATTACKER (MITM) ROLE - COMPLETE GUIDE
 ================================================================================
 
-When you select "attacker" role, ALL sections are shown:
+When you select "attacker" role, the following sections are shown:
+- Role Selection (to change role)
+- Network Setup (to configure relay targets)
+- Chat/Logs (to view intercepted traffic)
+- Attacker Controls (to configure attack modes)
+
+NOTE: Security section is NOT shown for Attacker role because the Attacker
+only relays frames without decrypting/encrypting. The Attacker does not need
+encryption settings as it operates at the network layer.
 
 A. NETWORK SETUP SECTION
 -------------------------
@@ -325,22 +333,7 @@ A. NETWORK SETUP SECTION
     - Attacker connects to Receiver on this port
   * Note: Usually same port for both
 
-B. SECURITY SECTION
--------------------
-- Encryption Mode (#enc-mode)
-  * Purpose: Usually not critical for Attacker
-  * Usage: Can leave as default (Attacker relays frames, doesn't decrypt)
-  * Note: Attacker sees ciphertext in encrypted modes
-
-- Key Exchange (#kx-mode)
-  * Purpose: Usually not critical for Attacker
-  * Usage: Can leave as default
-
-- Pre-shared Key (#psk-input)
-  * Purpose: Not used by Attacker
-  * Usage: Can leave empty
-
-C. ATTACKER CONTROLS SECTION
+B. ATTACKER CONTROLS SECTION
 -----------------------------
 Location: Section "Attacker Controls"
 
@@ -408,7 +401,7 @@ Components:
   * Required: Only when Mode = "Modify plaintext"
   * Default: Empty (uses "[MITM modified]" if empty)
 
-D. CHAT SECTION
+C. CHAT SECTION
 ---------------
 - Chat Log (#chat-log)
   * Purpose: Shows intercepted traffic and attack results
@@ -614,12 +607,13 @@ SOLUTION:
 - Verify Attack Mode is set correctly
 - Verify attack parameters (Modify Text, Drop Rate, etc.) are set
 
-PROBLEM: Role selection prompt keeps appearing
------------------------------------------------
+PROBLEM: No sections showing / Only role selection visible
+-----------------------------------------------------------
 SOLUTION:
-- You must select a role on startup
-- Type exactly: "sender", "receiver", or "attacker" (lowercase)
-- If you cancel, refresh page and select role
+- On startup, only the role selection window is shown (this is normal)
+- Select your role from the dropdown
+- Click "Set Role" button to display role-specific sections
+- If sections don't appear after clicking "Set Role", check browser console for errors
 
 PROBLEM: Wrong sections showing / Can't see options
 -------------------------------------------------
@@ -627,8 +621,9 @@ SOLUTION:
 - Only sections relevant to your role are shown
 - Sender: Network, Security, Chat (with input)
 - Receiver: Network, Security, Chat (no input)
-- Attacker: Network, Security, Chat (no input), Attacker Controls
+- Attacker: Network, Chat (no input), Attacker Controls (Security section is hidden)
 - Click "Set Role" button after selecting role to apply
+- On startup, only role selection is shown - select role first
 
 PROBLEM: Status shows "Disconnected from local control server"
 ---------------------------------------------------------------

@@ -27,44 +27,34 @@ function showRoleSections(role) {
   document.getElementById("chat-section").style.display = "none";
   document.getElementById("attacker-section").style.display = "none";
   
-  // Show role-specific sections
+  // Show role-specific sections (each in its own window)
   if (role === "sender") {
     document.getElementById("network-section").style.display = "block";
     document.getElementById("security-section").style.display = "block";
     document.getElementById("chat-section").style.display = "block";
+    // Show chat input for sender
+    document.getElementById("chat-input-row").style.display = "flex";
   } else if (role === "receiver") {
     document.getElementById("network-section").style.display = "block";
     document.getElementById("security-section").style.display = "block";
     document.getElementById("chat-section").style.display = "block";
-    // Hide chat input for receiver
+    // Hide chat input for receiver (read-only)
     document.getElementById("chat-input-row").style.display = "none";
   } else if (role === "attacker") {
     document.getElementById("network-section").style.display = "block";
-    document.getElementById("security-section").style.display = "block";
+    // Attacker doesn't need security section - it just relays frames without decrypting
+    document.getElementById("security-section").style.display = "none";
     document.getElementById("chat-section").style.display = "block";
     document.getElementById("attacker-section").style.display = "block";
-    // Hide chat input for attacker
+    // Hide chat input for attacker (read-only)
     document.getElementById("chat-input-row").style.display = "none";
   }
   
-  // Always show role section
+  // Keep role section visible for changing roles
   document.getElementById("role-section").style.display = "block";
 }
 
-function promptRoleSelection() {
-  const role = prompt("Please select your role:\n1. sender\n2. receiver\n3. attacker\n\nEnter the role name:", "");
-  if (role && ["sender", "receiver", "attacker"].includes(role.toLowerCase())) {
-    roleSelect.value = role.toLowerCase();
-    currentRole = role.toLowerCase();
-    showRoleSections(currentRole);
-    logLine(`Role selected: ${currentRole}`, "role-selected");
-    return true;
-  } else if (role) {
-    alert("Invalid role. Please choose: sender, receiver, or attacker");
-    return promptRoleSelection();
-  }
-  return false;
-}
+// Role selection is handled via the dropdown and setRoleBtn, no prompt needed
 
 async function initInfo() {
   try {
@@ -79,23 +69,21 @@ async function initInfo() {
     document.getElementById("psk-input").value = saved.psk || "";
     document.getElementById("transport").value = saved.transport || "tcp";
     
-    // Hide all sections initially, show only role selection
+    // Hide all sections initially, show only role selection window
     document.getElementById("network-section").style.display = "none";
     document.getElementById("security-section").style.display = "none";
     document.getElementById("chat-section").style.display = "none";
     document.getElementById("attacker-section").style.display = "none";
     
-    // Check if role was saved, otherwise prompt
+    // Check if role was saved, otherwise show only role selection
     if (saved.role && ["sender", "receiver", "attacker"].includes(saved.role)) {
       roleSelect.value = saved.role;
       currentRole = saved.role;
       showRoleSections(currentRole);
       logLine(`Restored role: ${currentRole}`, "role-selected");
     } else {
-      // Prompt for role selection on startup
-      if (!promptRoleSelection()) {
-        logLine("No role selected. Please refresh and select a role.", "error");
-      }
+      // Show only role selection window on startup
+      document.getElementById("role-section").style.display = "block";
     }
   } catch (e) {
     localIpEl.textContent = "Unknown";
@@ -147,7 +135,7 @@ setRoleBtn.onclick = () => {
   ensureWs();
   const role = roleSelect.value;
   if (!role) {
-    alert("Please select a role first");
+    logLine("Please select a role first", "error");
     return;
   }
   

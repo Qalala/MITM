@@ -6,22 +6,39 @@ body {
 }
 
 .container {
-  max-width: 960px;
+  max-width: 100%;
   margin: 0 auto;
   padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 h1 {
   font-size: 1.6rem;
   margin-bottom: 8px;
+  text-align: center;
+  width: 100%;
 }
 
 section {
   background: #ffffff;
-  padding: 12px;
-  margin-top: 12px;
-  border-radius: 6px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  padding: 16px;
+  margin: 16px auto;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  width: 100%;
+  max-width: 600px;
+  display: block;
+  box-sizing: border-box;
+}
+
+section h2 {
+  margin-top: 0;
+  margin-bottom: 16px;
+  font-size: 1.2rem;
+  border-bottom: 2px solid #e0e0e0;
+  padding-bottom: 8px;
 }
 
 label {
@@ -45,6 +62,11 @@ button {
 #status {
   font-size: 0.9rem;
   margin-bottom: 4px;
+  text-align: center;
+  width: 100%;
+  padding: 8px;
+  background: #e3f2fd;
+  border-radius: 4px;
 }
 
 .log {
@@ -100,9 +122,32 @@ button {
   color: #f44336;
 }
 
+/* Window-style sections for better component isolation */
+section[id$="-section"] {
+  min-height: 200px;
+}
+
+#role-section {
+  min-height: auto;
+}
+
+#chat-section {
+  min-height: 300px;
+}
+
+#chat-section .log {
+  min-height: 200px;
+}
+
 @media (max-width: 600px) {
   .container {
     padding: 8px;
+  }
+  
+  section {
+    margin: 12px auto;
+    padding: 12px;
+    max-width: 100%;
   }
 }
 
