@@ -1,0 +1,195 @@
+const {
+  sendUi,
+  logUi,
+  createTcpClient,
+  encodeFrame,
+  decodeFrames,
+  FRAME_TYPES
+} = require("./common");
+const {
+  buildHello,
+  ENC_MODES,
+  KX_MODES,
+  senderProcessKeyExchange
+} = require("../../../core/protocol/handshake");
+const { encryptGcm, generateNonce } = require("../../../core/crypto/aes_gcm");
+const { encryptCbcHmac, generateIv } = require("../../../core/crypto/aes_cbc_hmac");
+
+function createSender(config, ws) {
+  const targetIp = config.targetIp || "127.0.0.1";
+  const port = config.port || 12347;
+  const transport = config.transport || "tcp";
+  const demo = !!config.demo;
+  const encMode = Number(config.encMode || 0);
+  const kxMode = config.kxMode || KX_MODES.PSK;
+  const psk = config.psk ? Buffer.from(config.psk) : null;
+
+  let socket = null;
+  let running = true;
+  let handshakeDone = false;
+
+  let sessionKey = null;
+  let sharedSecret = null;
+  let seqOut = 0;
+
+  (async () => {
+    if (transport === "udp-broadcast") {
+      logUi(
+        ws,
+        "sender",
+        "UDP broadcast mode is handled by separate script (optional demo); TCP sender active."
+      );
+      return;
+    }
+    try {
+      socket = await createTcpClient(targetIp, port);
+      logUi(ws, "sender", `Connected to ${targetIp}:${port}, starting handshake`);
+      await doHandshake();
+      listenForFrames().catch((e) =>
+        logUi(ws, "sender", `Background receive error: ${e.message}`)
+      );
+    } catch (e) {
+      logUi(ws, "sender", `Failed to connect: ${e.message}`);
+      sendUi(ws, { type: "error", error: e.message });
+    }
+  })();
+
+  async function doHandshake() {
+    const hello = buildHello("sender", encMode, kxMode, demo);
+    socket.write(encodeFrame(FRAME_TYPES.HELLO, hello));
+
+    const frameIter = decodeFrames(socket);
+    const negotiate = await frameIter.next();
+    if (negotiate.done || negotiate.value.type !== FRAME_TYPES.NEGOTIATE) {
+      throw new Error("Expected NEGOTIATE frame");
+    }
+    const nego = JSON.parse(negotiate.value.payload.toString("utf8"));
+    if (nego.encMode !== encMode || nego.kxMode !== kxMode) {
+      throw new Error("Receiver refused parameters (downgrade prevention)");
+    }
+
+    const kx = await frameIter.next();
+    if (kx.done || kx.value.type !== FRAME_TYPES.KEY_EXCHANGE) {
+      throw new Error("Expected KEY_EXCHANGE from receiver");
+    }
+
+    const { responsePayload, stateUpdate } = senderProcessKeyExchange(
+      encMode,
+      kxMode,
+      kx.value.payload,
+      { psk }
+    );
+    if (responsePayload) {
+      socket.write(encodeFrame(FRAME_TYPES.KEY_EXCHANGE, responsePayload));
+    }
+    sessionKey = stateUpdate.sessionKey;
+    sharedSecret = stateUpdate.sharedSecret;
+
+    const ack = await frameIter.next();
+    if (ack.done || ack.value.type !== FRAME_TYPES.ACK) {
+      throw new Error("Expected ACK after key exchange");
+    }
+    handshakeDone = true;
+    logUi(ws, "sender", "Handshake complete, ready to send data");
+    sendUi(ws, { type: "status", status: "Handshake complete - encrypted" });
+  }
+
+  async function listenForFrames() {
+    const frameIter = decodeFrames(socket);
+    for await (const frame of frameIter) {
+      if (!running) break;
+      if (frame.type === FRAME_TYPES.ERROR) {
+        logUi(ws, "sender", `Error from receiver: ${frame.payload.toString("utf8")}`);
+      } else if (frame.type === FRAME_TYPES.DATA) {
+        logUi(ws, "sender", `DATA from receiver: ${frame.payload.toString("utf8")}`);
+      }
+    }
+    cleanup();
+  }
+
+  function buildDataPayload(text) {
+    if (encMode === ENC_MODES.PLAINTEXT) {
+      return Buffer.from(JSON.stringify({ text }), "utf8");
+    }
+
+    const seq = ++seqOut;
+    const seqBuf = Buffer.alloc(8);
+    seqBuf.writeBigUInt64BE(BigInt(seq));
+    const aad = Buffer.concat([Buffer.from("DATA"), seqBuf]);
+    const key = sessionKey || sharedSecret;
+    const pt = Buffer.from(text, "utf8");
+
+    if (encMode === ENC_MODES.AES_GCM) {
+      const nonce = generateNonce();
+      const { ciphertext, tag } = encryptGcm(key, nonce, pt, aad);
+      return Buffer.from(
+        JSON.stringify({
+          seq,
+          nonce: nonce.toString("base64"),
+          ciphertext: ciphertext.toString("base64"),
+          tag: tag.toString("base64")
+        }),
+        "utf8"
+      );
+    }
+
+    if (encMode === ENC_MODES.AES_CBC_HMAC) {
+      const iv = generateIv();
+      const encKey = key.slice(0, 32);
+      const macKey = key.slice(32, 64);
+      const { ciphertext, mac } = encryptCbcHmac(encKey, macKey, iv, pt, aad);
+      return Buffer.from(
+        JSON.stringify({
+          seq,
+          iv: iv.toString("base64"),
+          ciphertext: ciphertext.toString("base64"),
+          mac: mac.toString("base64")
+        }),
+        "utf8"
+      );
+    }
+
+    return Buffer.from(JSON.stringify({ text }), "utf8");
+  }
+
+  function cleanup() {
+    running = false;
+    try {
+      if (socket) {
+        socket.end();
+        socket.destroy();
+        socket = null;
+      }
+    } catch {}
+    logUi(ws, "sender", "Sender stopped and socket closed");
+  }
+
+  return {
+    async stop() {
+      cleanup();
+    },
+    async sendMessage(text) {
+      if (transport === "udp-broadcast") {
+        sendUi(ws, {
+          type: "error",
+          error: "UDP broadcast sending is available via scripts/udp_broadcast_demo.js"
+        });
+        return;
+      }
+      if (!socket || !handshakeDone) {
+        sendUi(ws, { type: "error", error: "Handshake not complete" });
+        return;
+      }
+      const payload = buildDataPayload(text);
+      socket.write(encodeFrame(FRAME_TYPES.DATA, payload));
+      logUi(ws, "sender", `SENT: ${text}`);
+      sendUi(ws, { type: "messageSent", text });
+    }
+  };
+}
+
+module.exports = {
+  createSender
+};
+
+

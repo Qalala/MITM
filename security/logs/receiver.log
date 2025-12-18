@@ -1,0 +1,5 @@
+[2025-12-18T15:19:12.913Z] [receiver] Receiver listening on 0.0.0.0:12347 (TCP)
+[2025-12-18T15:19:14.273Z] [receiver] Client connected, starting handshake
+[2025-12-18T15:20:39.409Z] [receiver] Receiver stopped and sockets closed
+[2025-12-18T15:20:39.412Z] [receiver] Receiver listening on 0.0.0.0:12347 (TCP)
+[2025-12-18T15:20:39.413Z] [receiver] Connection error: Premature close

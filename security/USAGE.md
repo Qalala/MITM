@@ -1,0 +1,362 @@
+## LAN Secure Chat + MITM Demo – Usage Guide
+
+This guide explains:
+- **How to run the project on desktop and mobile devices (with exact commands)**
+- **How to navigate the UI**
+- **Step‑by‑step test cases for the main demo scenarios**
+
+---
+
+## 1. Running the project
+
+### 1.1. Common prerequisites
+
+- **All devices on the same LAN / Wi‑Fi.**
+- **Node.js 18+** installed on any device that will run the backend (the Node server).
+- A **modern browser** (Chrome/Firefox/Edge/Safari) for the UI.
+
+You only need **one Node server per physical device**; you can then open multiple browser tabs on that device pointing to that server.
+
+---
+
+### 1.2. Desktop / Laptop (Windows, macOS, Linux)
+
+1. **Clone or copy the project** onto the laptop.
+2. Open a terminal in the project root (where `package.json` lives).
+3. Install dependencies:
+
+```bash
+npm install
+```
+
+4. Start the server:
+
+```bash
+npm start
+```
+
+5. In the terminal output, note the device’s **local IP address** (or find it via OS network settings).
+6. In a browser on the **same device**, open:
+
+```text
+http://localhost:3000/
+```
+
+7. From **other devices on the same LAN**, open:
+
+```text
+http://<laptop-ip>:3000/
+```
+
+Replace `<laptop-ip>` with the actual IP (for example: `192.168.1.23`).
+
+You can repeat steps 2–4 on **other laptops** if you want multiple machines each running their own instance of the demo.
+
+---
+
+### 1.3. Android (Termux + mobile browser)
+
+On Android you can run the **backend** in Termux and the **UI** in the mobile browser.
+
+1. Install **Termux** from a trusted source.
+2. In Termux, install Node:
+
+```bash
+pkg install nodejs
+```
+
+3. Clone/copy the project into Termux’s storage and `cd` into it:
+
+```bash
+cd /path/to/lan-secure-chat-mitm-demo
+```
+
+4. Install dependencies:
+
+```bash
+npm install
+```
+
+5. Start the server:
+
+```bash
+npm start
+```
+
+6. Find the Android device’s **Wi‑Fi IP address** (e.g. in system Wi‑Fi details).
+7. In the Android browser (Chrome/Firefox), open:
+
+```text
+http://<android-ip>:3000/
+```
+
+You can also open that URL from **other devices** on the same LAN (laptops, other phones).
+
+> **Note:** Android can also be used purely as a UI client by pointing its browser at a server running on a laptop instead.
+
+---
+
+### 1.4. iOS (iPhone / iPad)
+
+On iOS you usually **do not run the Node server**; instead you use it **as a browser client**.
+
+1. Run `npm install` and `npm start` on a **laptop or Android device** as described above.
+2. Find that server device’s **IP address**.
+3. On the iOS device, open Safari/Chrome and visit:
+
+```text
+http://<server-ip>:3000/
+```
+
+The iOS device can now act as **Sender / Receiver / Attacker** via the browser UI, while the actual TCP sockets run on the server device.
+
+---
+
+## 2. Navigating the UI
+
+Open `http://<server-ip>:3000/` in a browser. The main sections are:
+
+- **Status bar (`#status`)**
+  - Shows connection to the local control server and current role state (e.g. “Receiver listening”, “Handshake complete – encrypted”).
+
+- **1. Choose Role**
+  - `Role` dropdown (`#role-select`): **Sender**, **Receiver**, or **Attacker (MITM)**.
+  - `Set Role` button (`#set-role-btn`): applies the selected role with the current configuration.
+
+- **2. Network Setup**
+  - `Local IP` label (`#local-ip`): shows the device’s detected IP and default TCP port.
+  - `Transport` (`#transport`): normally **TCP**. `UDP broadcast` is for the optional demo script.
+  - `Target IP` (`#target-ip`): where the **Sender** or **Attacker** will connect (Receiver or Attacker IP).
+  - `Port` (`#target-port`): defaults to **12347** and must match the Receiver/Attacker listening port.
+  - `Auto discover` (`#discover-btn`): broadcasts on the LAN and shows results in `#discover-results`.
+
+- **3. Security**
+  - `Encryption mode` (`#enc-mode`):
+    - **0 – None (Plaintext)**
+    - **1 – AES‑GCM**
+    - **2 – AES‑CBC + HMAC‑SHA256**
+    - **3 – Diffie‑Hellman (demo)**
+  - `Key exchange` (`#kx-mode`):
+    - **Pre‑shared key (psk)**
+    - **RSA**
+    - **Diffie‑Hellman (dh)**
+  - `Pre‑shared key` (`#psk-input`): used when `psk` is chosen.
+  - `Demo mode` (`#demo-mode`): enables more verbose logging/steps.
+
+- **4. Chat / Logs**
+  - `Chat log` (`#chat-log`): shows sent/received messages and logs.
+  - `Input` (`#chat-input`) + `Send` button (`#send-btn`): used by **Sender** to send messages.
+
+- **Attacker Controls**
+  - `Mode` (`#attack-mode`):
+    - **Passive sniff/log**
+    - **Modify plaintext**
+    - **Drop packets**
+    - **Delay packets**
+    - **Replay last**
+    - **Downgrade attempt**
+  - `Drop rate (%)` (`#drop-rate`): how often to drop frames in **Drop** mode.
+  - `Delay (ms)` (`#delay-ms`): extra latency in **Delay** mode.
+  - `Modify text` (`#modify-text`): replacement text in **Modify plaintext** mode.
+
+Configuration (IP, port, encryption, key exchange, PSK) is stored in `localStorage`, so it persists between reloads on the same device.
+
+---
+
+## 3. Test scenarios and step‑by‑step cases
+
+Below are concrete test scripts you can follow. In all scenarios:
+
+- **Receiver** listens on `0.0.0.0:12347` (default).
+- **Sender’s Target IP** points either directly to Receiver (no MITM) or to Attacker (for MITM).
+- **Encryption mode** and **Key exchange** must match between Sender and Receiver.
+
+### 3.1. Plaintext chat without MITM (baseline)
+
+**Goal:** Verify basic Sender→Receiver chat works in **Mode 0 (Plaintext)**.
+
+1. **Receiver device**
+   - Open `http://<receiver-ip>:3000/` in a browser.
+   - Section **1. Choose Role**: select **Receiver**, click **Set Role**.
+   - Section **2. Network Setup**:
+     - Ensure **Transport = TCP**.
+     - Leave **Port = 12347**.
+   - Section **3. Security**:
+     - **Encryption mode = 0 – None (Plaintext)**.
+     - **Key exchange = Pre‑shared key** (PSK is ignored in plaintext).
+   - Confirm status shows **“Receiver listening on 0.0.0.0:12347”**.
+
+2. **Sender device**
+   - Open `http://<sender-ip>:3000/` in a browser.
+   - Role: **Sender**, click **Set Role**.
+   - Network:
+     - **Target IP = <receiver-ip>**
+     - **Port = 12347**
+     - **Transport = TCP**
+   - Security:
+     - **Encryption mode = 0 – None (Plaintext)**.
+     - **Key exchange = Pre‑shared key**.
+   - When status indicates handshake complete or ready, go to **4. Chat / Logs**.
+   - Type `Hello plaintext` and click **Send**.
+
+3. **Expected results**
+   - Receiver’s `#chat-log` shows: `RECV (plaintext): Hello plaintext`.
+   - Sender log shows message was sent.
+
+---
+
+### 3.2. Plaintext with successful MITM read/modify
+
+**Goal:** Demonstrate that plaintext traffic can be read and modified by an active MITM.
+
+1. **Receiver (Laptop 1)**
+   - As in 3.1, configure **Receiver**, **TCP**, **Port 12347**.
+   - **Encryption mode = 0 – None (Plaintext)**.
+   - **Key exchange = Pre‑shared key**.
+
+2. **Attacker (Mobile or Laptop 2)**
+   - Open `http://<attacker-ip>:3000/`.
+   - Role: **Attacker (MITM)**, click **Set Role**.
+   - Network:
+     - **Target IP = <receiver-ip>**
+     - **Port = 12347**.
+   - Attacker Controls:
+     - **Mode = Modify plaintext**.
+     - **Modify text = HACKED** (for example).
+
+3. **Sender (Laptop 3 or another device)**
+   - Open `http://<sender-ip>:3000/`.
+   - Role: **Sender**, click **Set Role**.
+   - Network:
+     - **Target IP = <attacker-ip>** (not the receiver directly).
+     - **Port = 12347**.
+   - Security:
+     - **Encryption mode = 0 – None (Plaintext)**.
+     - **Key exchange = Pre‑shared key**.
+   - After handshake, send the message `hello world`.
+
+4. **Expected results**
+   - **Attacker log** (`#chat-log` on attacker device) shows intercepted frame contents in hex/base64 and logs indicating a **modified plaintext DATA frame**.
+   - **Receiver log** shows the altered message, e.g. `RECV (plaintext): HACKED`.
+   - **Sender log** still shows it sent `hello world`.
+
+---
+
+### 3.3. AES‑GCM with integrity – MITM sees ciphertext, tampering fails
+
+**Goal:** Show that with **AES‑GCM**, the attacker cannot read or modify traffic without detection.
+
+1. **Receiver**
+   - Role: **Receiver**, Port = `12347`, Transport = TCP.
+   - Security:
+     - **Encryption mode = 1 – AES‑GCM**.
+     - **Key exchange = Pre‑shared key**.
+     - Set **PSK = demo-psk** (or another shared string, but use the same for Sender).
+
+2. **Attacker**
+   - Role: **Attacker (MITM)**.
+   - Network:
+     - **Target IP = <receiver-ip>**, **Port = 12347**.
+   - Attacker Controls:
+     - **Mode = Modify plaintext** or **Replay last** (both should fail against integrity).
+
+3. **Sender**
+   - Role: **Sender**.
+   - Network:
+     - **Target IP = <attacker-ip>**, **Port = 12347**.
+   - Security:
+     - **Encryption mode = 1 – AES‑GCM**.
+     - **Key exchange = Pre‑shared key**.
+     - **PSK = demo-psk** (exactly the same as Receiver).
+   - After handshake, send the message `hello secure`.
+
+4. **Expected results**
+   - **Attacker log** shows frames as ciphertext (hex/base64) and cannot interpret the plaintext.
+   - If the attacker is in **Modify** or **Replay** mode, Receiver detects integrity/replay issues and **does not accept modified content** (or logs replay detection).
+   - **Receiver log** shows the original text received correctly when packets are not tampered with.
+
+---
+
+### 3.4. AES‑CBC + HMAC‑SHA256 – encrypt‑then‑MAC with replay protection
+
+**Goal:** Demonstrate authenticated encryption using **AES‑CBC + HMAC‑SHA256** with replay protection.
+
+1. **Receiver**
+   - Role: **Receiver**, Port = `12347`, Transport = TCP.
+   - Security:
+     - **Encryption mode = 2 – AES‑CBC + HMAC‑SHA256**.
+     - **Key exchange = Pre‑shared key** (or RSA/DH if you prefer).
+     - Set **PSK** to some value, e.g. `cbc-psk`.
+
+2. **Sender**
+   - Role: **Sender**.
+   - Network:
+     - **Target IP = <receiver-ip>** (no MITM for this basic scenario).
+   - Security:
+     - **Encryption mode = 2 – AES‑CBC + HMAC‑SHA256**.
+     - **Key exchange = Pre‑shared key**.
+     - **PSK = cbc-psk** (same as Receiver).
+   - After handshake, send `cbc secret one` and then `cbc secret two`.
+
+3. **Optional: Attacker replay test**
+   - Insert an **Attacker** between Sender and Receiver as in previous scenarios.
+   - Set **Mode = Replay last**.
+
+4. **Expected results**
+   - Receiver log shows decrypted messages as:
+     - `RECV (AES-CBC+HMAC): cbc secret one`
+     - `RECV (AES-CBC+HMAC): cbc secret two`
+   - When attacker replays old frames, Receiver logs **replay detected** and ignores them (due to sequence number checks).
+
+---
+
+### 3.5. Diffie‑Hellman (unauthenticated vs authenticated concept)
+
+**Goal:** Illustrate how unauthenticated DH can be vulnerable to MITM, while authenticated DH can be secure (conceptual demo).
+
+1. **Unauthenticated DH setup**
+   - Receiver:
+     - Role: **Receiver**, Port `12347`, Transport TCP.
+     - Security:
+       - **Encryption mode = 3 – Diffie‑Hellman (demo)**.
+       - **Key exchange = dh** (if used).
+   - Sender:
+     - Role: **Sender**, Target IP = `<receiver-ip>`, same enc/kx as Receiver.
+   - Optionally insert an **Attacker** in passive mode to log frames and reason about substituting DH keys.
+
+2. **Authenticated DH (concept)**
+   - Extend the configuration by combining DH with PSK/RSA (not fully automated in this UI).
+   - Use PSK or RSA to authenticate parameters or wrap DH keys.
+
+3. **Expected results**
+   - With unauthenticated DH, you can reason how an attacker *could* substitute keys.
+   - With an authenticated setup, such substitution would be detected, preventing silent MITM on key exchange.
+
+---
+
+### 3.6. Optional: UDP broadcast demo (scripts)
+
+**Goal:** Test the optional 1:M UDP broadcast with AES‑GCM.
+
+1. **On one terminal (Sender side)**
+
+```bash
+node scripts/udp_broadcast_demo.js send
+```
+
+2. Copy the printed key from the sender output.
+
+3. **On another terminal (Receiver side)**
+
+```bash
+node scripts/udp_broadcast_demo.js recv <printed-key-hex>
+```
+
+4. **Expected results**
+   - Receivers show AES‑GCM decrypted broadcast messages; tampering should fail due to integrity checks.
+
+---
+
+This `USAGE.md` file is intended as a practical companion to `README.md`, focusing on concrete steps and test cases you can run on real desktop and mobile devices.
+
+

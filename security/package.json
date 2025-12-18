@@ -1,0 +1,20 @@
+{
+  "name": "lan-secure-chat-mitm-demo",
+  "version": "1.0.0",
+  "description": "Secure Sender-Receiver communication with Man-in-the-Middle attacker demo over LAN (TCP, AES-GCM, AES-CBC+HMAC, DH).",
+  "main": "app/server/index.js",
+  "scripts": {
+    "start": "node app/server/index.js",
+    "dev": "NODE_ENV=development node app/server/index.js",
+    "test": "node --test",
+    "lint": "node -c app/server/index.js || exit 0"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.21.1",
+    "ws": "^8.18.0"
+  }
+}
+
+

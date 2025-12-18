@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>LAN Secure Chat + MITM Demo</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>LAN Secure Chat + MITM Demo</h1>
+      <div id="status"></div>
+
+      <section id="role-section">
+        <h2>1. Choose Role</h2>
+        <select id="role-select">
+          <option value="sender">Sender</option>
+          <option value="receiver">Receiver</option>
+          <option value="attacker">Attacker (MITM)</option>
+        </select>
+        <button id="set-role-btn">Set Role</button>
+      </section>
+
+      <section id="network-section">
+        <h2>2. Network Setup</h2>
+        <div>Local IP: <span id="local-ip">Loading...</span></div>
+        <label
+          >Transport:
+          <select id="transport">
+            <option value="tcp">TCP (1:1, default)</option>
+            <option value="udp-broadcast">UDP broadcast (1:M, optional)</option>
+          </select>
+        </label>
+        <label>Target IP: <input id="target-ip" placeholder="e.g. 192.168.1.10" /></label>
+        <label>Port: <input id="target-port" value="12347" /></label>
+        <button id="discover-btn">Auto discover</button>
+        <div id="discover-results" class="log" style="min-height:60px;max-height:120px;"></div>
+      </section>
+
+      <section id="security-section">
+        <h2>3. Security</h2>
+        <label
+          >Encryption mode:
+          <select id="enc-mode">
+            <option value="0">0 - None (Plaintext)</option>
+            <option value="1">1 - AES-GCM</option>
+            <option value="2">2 - AES-CBC + HMAC-SHA256</option>
+            <option value="3">3 - Diffie-Hellman (demo)</option>
+          </select>
+        </label>
+        <label
+          >Key exchange:
+          <select id="kx-mode">
+            <option value="psk">Pre-shared key</option>
+            <option value="rsa">RSA</option>
+            <option value="dh">Diffie-Hellman</option>
+          </select>
+        </label>
+        <label>Pre-shared key (hex/string): <input id="psk-input" /></label>
+        <label><input type="checkbox" id="demo-mode" /> Demo mode (show steps)</label>
+      </section>
+
+      <section id="chat-section">
+        <h2>4. Chat / Logs</h2>
+        <div id="chat-log" class="log"></div>
+        <div id="chat-input-row">
+          <input id="chat-input" placeholder="Type message..." />
+          <button id="send-btn">Send</button>
+        </div>
+      </section>
+
+      <section id="attacker-section">
+        <h2>Attacker Controls</h2>
+        <label
+          >Mode:
+          <select id="attack-mode">
+            <option value="passive">Passive sniff/log</option>
+            <option value="modify">Modify plaintext</option>
+            <option value="drop">Drop packets</option>
+            <option value="delay">Delay packets</option>
+            <option value="replay">Replay last</option>
+            <option value="downgrade">Downgrade attempt</option>
+          </select>
+        </label>
+        <label>Drop rate (%): <input id="drop-rate" type="number" value="0" min="0" max="100" /></label>
+        <label>Delay (ms): <input id="delay-ms" type="number" value="0" min="0" /></label>
+        <label>Modify text: <input id="modify-text" /></label>
+      </section>
+    </div>
+
+    <script src="main.js"></script>
+  </body>
+</html>
+
+

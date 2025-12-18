@@ -1,0 +1,689 @@
+================================================================================
+LAN SECURE CHAT + MITM DEMO - COMPREHENSIVE USER GUIDE
+================================================================================
+
+This guide explains how to use every component in the application for each role.
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+
+1. Getting Started
+2. Role Selection
+3. Sender Role - Complete Guide
+4. Receiver Role - Complete Guide
+5. Attacker (MITM) Role - Complete Guide
+6. Common Workflows
+7. Troubleshooting
+
+================================================================================
+1. GETTING STARTED
+================================================================================
+
+STEP 1: Start the Server
+------------------------
+1. Open a terminal/command prompt in the project directory
+2. Run: npm start
+3. Note the IP address shown (e.g., "Server listening on http://localhost:3000")
+4. Open your browser and go to: http://localhost:3000 (or http://<your-ip>:3000)
+
+STEP 2: Select Your Role
+-------------------------
+When the page loads, you will be prompted to select a role:
+- Type "sender" for Sender role
+- Type "receiver" for Receiver role  
+- Type "attacker" for Attacker (MITM) role
+
+After selecting a role, only the relevant sections for that role will be displayed.
+
+================================================================================
+2. ROLE SELECTION SECTION
+================================================================================
+
+Location: Top of the page, Section "1. Choose Role"
+
+Components:
+-----------
+- Role Dropdown (#role-select)
+  * Options: Sender, Receiver, Attacker (MITM)
+  * Purpose: Select which role you want to play
+  * Usage: Click dropdown and select your role
+
+- Set Role Button (#set-role-btn)
+  * Purpose: Apply the selected role with current configuration
+  * Usage: After selecting role and configuring settings, click this button
+  * Note: This will start/restart the role with your current settings
+
+IMPORTANT: You must select a role on startup. The application will prompt you.
+
+================================================================================
+3. SENDER ROLE - COMPLETE GUIDE
+================================================================================
+
+When you select "sender" role, the following sections are shown:
+
+A. NETWORK SETUP SECTION
+-------------------------
+Location: Section "2. Network Setup"
+
+Components:
+-----------
+- Local IP Display (#local-ip)
+  * Purpose: Shows your device's IP address and default port
+  * Format: "192.168.1.10:12347 (TCP)"
+  * Usage: Reference only - use this IP if others need to connect to you
+
+- Transport Dropdown (#transport)
+  * Options: 
+    - TCP (1:1, default) - Standard one-to-one connection
+    - UDP broadcast (1:M, optional) - One-to-many broadcast (requires scripts)
+  * Usage: Select TCP for normal operation
+  * Default: TCP
+
+- Target IP Input (#target-ip)
+  * Purpose: IP address of the Receiver or Attacker you want to connect to
+  * Format: e.g., "192.168.1.20"
+  * Usage: Enter the IP address where Receiver/Attacker is listening
+  * Required: Yes (for Sender role)
+  * Example: If Receiver is on 192.168.1.20, enter "192.168.1.20"
+  * Note: If using Attacker, enter Attacker's IP, not Receiver's IP
+
+- Port Input (#target-port)
+  * Purpose: TCP port number to connect to
+  * Default: 12347
+  * Usage: Enter the port number (must match Receiver/Attacker port)
+  * Required: Yes
+  * Note: Default is 12347 - only change if Receiver/Attacker uses different port
+
+- Auto Discover Button (#discover-btn)
+  * Purpose: Automatically find other devices on the LAN
+  * Usage: Click to scan network for available receivers/attackers
+  * Result: Shows discovered IPs in the discovery results area below
+
+- Discovery Results (#discover-results)
+  * Purpose: Shows results from auto-discovery
+  * Format: List of IP addresses found
+  * Usage: Click on a discovered IP to use it as Target IP
+
+B. SECURITY SECTION
+-------------------
+Location: Section "3. Security"
+
+Components:
+-----------
+- Encryption Mode Dropdown (#enc-mode)
+  * Purpose: Select encryption method for messages
+  * Options:
+    0 - None (Plaintext)
+      * No encryption - messages sent as plain text
+      * Use for: Testing, demonstrating MITM attacks
+      * Warning: Anyone can read/modify messages
+    
+    1 - AES-GCM
+      * AES-256-GCM encryption with integrity protection
+      * Use for: Secure communication (recommended)
+      * Features: Prevents reading and tampering
+    
+    2 - AES-CBC + HMAC-SHA256
+      * AES-CBC encryption with HMAC authentication
+      * Use for: Secure communication with encrypt-then-MAC
+      * Features: Prevents reading and tampering
+    
+    3 - Diffie-Hellman (demo)
+      * Educational demo of DH key exchange
+      * Use for: Learning about key exchange vulnerabilities
+  * Usage: Select mode that matches Receiver's setting
+  * Required: Must match Receiver exactly
+
+- Key Exchange Dropdown (#kx-mode)
+  * Purpose: Select key exchange method
+  * Options:
+    - Pre-shared key (psk)
+      * Both Sender and Receiver use same password/key
+      * Usage: Enter the same PSK in both Sender and Receiver
+      * Best for: Simple setups, testing
+    
+    - RSA
+      * Receiver generates RSA key pair, sends public key
+      * Sender encrypts session key with public key
+      * Best for: Secure key exchange without pre-shared secret
+    
+    - Diffie-Hellman (dh)
+      * Both parties exchange DH public keys
+      * Shared secret derived from DH exchange
+      * Best for: Learning about DH key exchange
+  * Usage: Select method that matches Receiver
+  * Required: Must match Receiver exactly
+
+- Pre-shared Key Input (#psk-input)
+  * Purpose: Enter shared password/key (when using PSK mode)
+  * Format: Any text string
+  * Usage: Type the same key that Receiver has entered
+  * Required: Only when Key Exchange = "Pre-shared key"
+  * Example: "my-secret-key-123"
+  * Warning: Must match Receiver's PSK exactly
+
+- Demo Mode Checkbox (#demo-mode)
+  * Purpose: Enable verbose logging for educational purposes
+  * Usage: Check to see detailed step-by-step logs
+  * When to use: Learning how encryption/handshake works
+  * Default: Unchecked
+
+C. CHAT SECTION
+---------------
+Location: Section "4. Chat / Logs"
+
+Components:
+-----------
+- Chat Log (#chat-log)
+  * Purpose: Displays all messages and system logs
+  * Format: 
+    - [sender] messages in blue (→ SENT: message)
+    - [receiver] messages in green (← RECEIVED: message)
+    - System logs in default color
+    - Errors in red
+    - Attack notifications in orange/red
+  * Usage: Monitor connection status and messages here
+  * Auto-scrolls: Yes, automatically scrolls to latest message
+
+- Chat Input (#chat-input)
+  * Purpose: Type messages to send
+  * Usage: Type your message and click Send button
+  * Enabled: Only when handshake is complete
+  * Note: Only Sender role can send messages
+
+- Send Button (#send-btn)
+  * Purpose: Send the message typed in Chat Input
+  * Usage: Click after typing message
+  * Requirements: 
+    - Must be Sender role
+    - Handshake must be complete
+    - Message must not be empty
+  * Status: Button disabled if handshake not complete
+
+WORKFLOW FOR SENDER:
+--------------------
+1. Select "sender" from role dropdown
+2. Enter Target IP (Receiver or Attacker IP)
+3. Set Port (default 12347)
+4. Select Encryption Mode (must match Receiver)
+5. Select Key Exchange (must match Receiver)
+6. If using PSK, enter Pre-shared Key (must match Receiver)
+7. Click "Set Role" button
+8. Wait for status to show "Handshake complete - encrypted"
+9. Type message in Chat Input
+10. Click Send button
+11. See your message in chat log as "→ SENT: your message"
+12. See received messages as "← RECEIVED: message"
+
+================================================================================
+4. RECEIVER ROLE - COMPLETE GUIDE
+================================================================================
+
+When you select "receiver" role, the following sections are shown:
+
+A. NETWORK SETUP SECTION
+-------------------------
+Same as Sender, but with different usage:
+
+- Local IP Display (#local-ip)
+  * Purpose: Shows your IP address - share this with Sender
+  * Usage: Tell Sender to use this IP as their Target IP
+
+- Transport Dropdown (#transport)
+  * Usage: Select TCP (default)
+  * Note: UDP broadcast requires separate scripts
+
+- Target IP Input (#target-ip)
+  * Purpose: Not used for Receiver (Receiver listens, doesn't connect)
+  * Usage: Leave empty or ignore
+
+- Port Input (#target-port)
+  * Purpose: Port number to listen on
+  * Default: 12347
+  * Usage: Set the port you want to listen on
+  * Note: Tell Sender to use this same port
+
+- Auto Discover Button (#discover-btn)
+  * Usage: Can use to find other devices, but not required
+
+B. SECURITY SECTION
+-------------------
+Same components as Sender, but Receiver must match Sender's settings:
+
+- Encryption Mode (#enc-mode)
+  * CRITICAL: Must match Sender's encryption mode exactly
+  * Usage: Select same mode as Sender selected
+  * Example: If Sender uses "1 - AES-GCM", Receiver must also use "1 - AES-GCM"
+
+- Key Exchange (#kx-mode)
+  * CRITICAL: Must match Sender's key exchange method
+  * Usage: Select same method as Sender
+
+- Pre-shared Key (#psk-input)
+  * CRITICAL: Must match Sender's PSK exactly
+  * Usage: Enter exactly the same key as Sender
+  * Example: If Sender uses "demo-psk", Receiver must also use "demo-psk"
+
+C. CHAT SECTION
+---------------
+- Chat Log (#chat-log)
+  * Purpose: Shows received messages and system logs
+  * Format:
+    - Received messages: "← RECEIVED: message" (green)
+    - Attack success: "⚠ ATTACK SUCCESS: message was modified" (red)
+    - Attack failures: "✗ ATTACK FAILED: reason" (orange)
+    - System logs: Default color
+  * Usage: Monitor incoming messages and attack detection
+
+- Chat Input (#chat-input)
+  * Purpose: NOT USED for Receiver
+  * Status: Hidden/disabled for Receiver role
+  * Note: Receiver only receives messages, cannot send
+
+WORKFLOW FOR RECEIVER:
+----------------------
+1. Select "receiver" from role dropdown
+2. Note your Local IP address (share with Sender)
+3. Set Port (default 12347, share with Sender)
+4. Select Encryption Mode (must match Sender)
+5. Select Key Exchange (must match Sender)
+6. If using PSK, enter Pre-shared Key (must match Sender exactly)
+7. Click "Set Role" button
+8. Status shows "Receiver listening on 0.0.0.0:12347"
+9. Wait for Sender to connect
+10. Status changes to "Handshake complete - encrypted" when connected
+11. Received messages appear in chat log as "← RECEIVED: message"
+12. If attack detected, see "✗ ATTACK FAILED: reason" or "⚠ ATTACK SUCCESS: message"
+
+================================================================================
+5. ATTACKER (MITM) ROLE - COMPLETE GUIDE
+================================================================================
+
+When you select "attacker" role, ALL sections are shown:
+
+A. NETWORK SETUP SECTION
+-------------------------
+- Local IP Display (#local-ip)
+  * Purpose: Your IP address - share this with Sender
+  * Usage: Tell Sender to connect to YOUR IP, not Receiver's IP
+
+- Transport Dropdown (#transport)
+  * Usage: Select TCP (default)
+
+- Target IP Input (#target-ip)
+  * Purpose: IP address of the REAL Receiver
+  * Usage: Enter Receiver's IP address here
+  * Example: If Receiver is on 192.168.1.20, enter "192.168.1.20"
+  * Note: Attacker sits between Sender and Receiver
+
+- Port Input (#target-port)
+  * Purpose: Port number (both listening and target)
+  * Default: 12347
+  * Usage: 
+    - Attacker listens on this port (Sender connects here)
+    - Attacker connects to Receiver on this port
+  * Note: Usually same port for both
+
+B. SECURITY SECTION
+-------------------
+- Encryption Mode (#enc-mode)
+  * Purpose: Usually not critical for Attacker
+  * Usage: Can leave as default (Attacker relays frames, doesn't decrypt)
+  * Note: Attacker sees ciphertext in encrypted modes
+
+- Key Exchange (#kx-mode)
+  * Purpose: Usually not critical for Attacker
+  * Usage: Can leave as default
+
+- Pre-shared Key (#psk-input)
+  * Purpose: Not used by Attacker
+  * Usage: Can leave empty
+
+C. ATTACKER CONTROLS SECTION
+-----------------------------
+Location: Section "Attacker Controls"
+
+Components:
+-----------
+- Mode Dropdown (#attack-mode)
+  * Purpose: Select attack type to perform
+  * Options:
+    - Passive sniff/log
+      * Just relays traffic and logs it
+      * Use for: Observing traffic without modifying
+      * Result: See all frames in hex/base64 format
+    
+    - Modify plaintext
+      * Modifies plaintext messages (only works on unencrypted)
+      * Use for: Demonstrating MITM on plaintext
+      * Requirements: Sender must use Encryption Mode 0 (Plaintext)
+      * Result: 
+        - Success: Plaintext messages modified, Receiver sees modified text
+        - Failure: Encrypted messages cannot be modified (attack fails)
+    
+    - Drop packets
+      * Randomly drops packets based on drop rate
+      * Use for: Demonstrating packet loss
+      * Requires: Set Drop rate (%) below
+      * Result: Some messages don't reach Receiver
+    
+    - Delay packets
+      * Adds artificial delay to packets
+      * Use for: Demonstrating latency attacks
+      * Requires: Set Delay (ms) below
+      * Result: Messages arrive late at Receiver
+    
+    - Replay last
+      * Re-sends the last DATA frame
+      * Use for: Demonstrating replay attacks
+      * Result: 
+        - Success: Works on plaintext
+        - Failure: Encrypted modes detect replay (sequence number check)
+    
+    - Downgrade attempt
+      * Tries to force plaintext encryption
+      * Use for: Demonstrating downgrade attacks
+      * Result: Usually fails (Receiver detects mode mismatch)
+  * Usage: Select attack type, then configure parameters below
+
+- Drop Rate Input (#drop-rate)
+  * Purpose: Percentage of packets to drop (0-100)
+  * Usage: Enter number between 0 and 100
+  * Example: 50 = drop 50% of packets
+  * Required: Only when Mode = "Drop packets"
+  * Default: 0
+
+- Delay Input (#delay-ms)
+  * Purpose: Milliseconds to delay each packet
+  * Usage: Enter number in milliseconds
+  * Example: 1000 = delay by 1 second
+  * Required: Only when Mode = "Delay packets"
+  * Default: 0
+
+- Modify Text Input (#modify-text)
+  * Purpose: Text to replace original message with
+  * Usage: Enter replacement text
+  * Example: "HACKED" or "[MITM modified]"
+  * Required: Only when Mode = "Modify plaintext"
+  * Default: Empty (uses "[MITM modified]" if empty)
+
+D. CHAT SECTION
+---------------
+- Chat Log (#chat-log)
+  * Purpose: Shows intercepted traffic and attack results
+  * Format:
+    - Intercepted frames: "sender->receiver frame type=X len=Y raw-hex=..."
+    - Attack success: "⚠ ATTACK SUCCESS: description" (red)
+    - Attack failure: "✗ ATTACK FAILED: reason" (orange, only shown to Attacker)
+    - System logs: Default color
+  * Usage: Monitor attack effectiveness
+
+- Chat Input (#chat-input)
+  * Purpose: NOT USED for Attacker
+  * Status: Hidden/disabled for Attacker role
+
+WORKFLOW FOR ATTACKER:
+----------------------
+1. Select "attacker" from role dropdown
+2. Note your Local IP address (share with Sender)
+3. Enter Receiver's IP in Target IP field
+4. Set Port (default 12347)
+5. Select Attack Mode from dropdown
+6. Configure attack parameters:
+   - If Modify: Enter Modify Text
+   - If Drop: Set Drop Rate (%)
+   - If Delay: Set Delay (ms)
+7. Click "Set Role" button
+8. Status shows "Attacker listening, forwarding to <receiver-ip>:<port>"
+9. Tell Sender to connect to YOUR IP (not Receiver's IP)
+10. When Sender connects, see "Sender connected to attacker"
+11. See "Connected to real receiver" when Attacker connects to Receiver
+12. Monitor chat log for:
+    - Intercepted frames (hex/base64)
+    - Attack success/failure notifications
+    - Modified messages (if Modify mode on plaintext)
+
+ATTACK SCENARIOS:
+-----------------
+Scenario 1: Successful Plaintext Modification
+- Sender: Encryption Mode = 0 (Plaintext)
+- Attacker: Mode = Modify plaintext, Modify Text = "HACKED"
+- Result: Receiver receives "HACKED" instead of original message
+- Attacker sees: "⚠ ATTACK SUCCESS: Successfully modified plaintext message"
+- Receiver sees: "⚠ ATTACK SUCCESS: Message was modified: 'HACKED'"
+
+Scenario 2: Failed Encrypted Modification
+- Sender: Encryption Mode = 1 (AES-GCM)
+- Attacker: Mode = Modify plaintext
+- Result: Attack fails, Receiver detects tampering
+- Attacker sees: "✗ ATTACK FAILED: Modify attack failed: message is encrypted"
+- Receiver sees: "✗ ATTACK FAILED: Integrity check failed - tampering detected"
+
+Scenario 3: Successful Replay on Plaintext
+- Sender: Encryption Mode = 0 (Plaintext)
+- Attacker: Mode = Replay last
+- Result: Last message sent again to Receiver
+
+Scenario 4: Failed Replay on Encrypted
+- Sender: Encryption Mode = 1 (AES-GCM)
+- Attacker: Mode = Replay last
+- Result: Receiver detects replay (sequence number check)
+- Receiver sees: "✗ ATTACK FAILED: Replay attack detected and blocked"
+
+================================================================================
+6. COMMON WORKFLOWS
+================================================================================
+
+WORKFLOW 1: Basic Plaintext Chat (No Attacker)
+------------------------------------------------
+1. Device A (Receiver):
+   - Select "receiver"
+   - Note IP address (e.g., 192.168.1.20)
+   - Encryption Mode = 0 (Plaintext)
+   - Key Exchange = Pre-shared key
+   - Click "Set Role"
+   - Wait for "Receiver listening"
+
+2. Device B (Sender):
+   - Select "sender"
+   - Target IP = 192.168.1.20 (Receiver's IP)
+   - Port = 12347
+   - Encryption Mode = 0 (Plaintext)
+   - Key Exchange = Pre-shared key
+   - Click "Set Role"
+   - Wait for "Handshake complete"
+
+3. Device B sends message:
+   - Type message in Chat Input
+   - Click Send
+   - See "→ SENT: message" in log
+
+4. Device A receives:
+   - See "← RECEIVED: message" in log
+
+WORKFLOW 2: Secure Encrypted Chat (AES-GCM)
+---------------------------------------------
+1. Device A (Receiver):
+   - Select "receiver"
+   - Note IP address
+   - Encryption Mode = 1 (AES-GCM)
+   - Key Exchange = Pre-shared key
+   - Pre-shared Key = "my-secret-key"
+   - Click "Set Role"
+
+2. Device B (Sender):
+   - Select "sender"
+   - Target IP = Receiver's IP
+   - Encryption Mode = 1 (AES-GCM)
+   - Key Exchange = Pre-shared key
+   - Pre-shared Key = "my-secret-key" (MUST MATCH)
+   - Click "Set Role"
+
+3. Messages are encrypted and protected
+
+WORKFLOW 3: MITM Attack on Plaintext
+-------------------------------------
+1. Device A (Receiver):
+   - Select "receiver"
+   - Note IP address (e.g., 192.168.1.20)
+   - Encryption Mode = 0 (Plaintext)
+   - Click "Set Role"
+
+2. Device B (Attacker):
+   - Select "attacker"
+   - Note IP address (e.g., 192.168.1.15)
+   - Target IP = 192.168.1.20 (Receiver's IP)
+   - Attack Mode = Modify plaintext
+   - Modify Text = "HACKED"
+   - Click "Set Role"
+
+3. Device C (Sender):
+   - Select "sender"
+   - Target IP = 192.168.1.15 (Attacker's IP, NOT Receiver's)
+   - Encryption Mode = 0 (Plaintext)
+   - Click "Set Role"
+
+4. Device C sends "Hello World"
+5. Device A receives "HACKED" (modified by Attacker)
+6. Device B (Attacker) sees attack success notification
+
+WORKFLOW 4: MITM Attack Fails on Encrypted
+-------------------------------------------
+1. Device A (Receiver):
+   - Select "receiver"
+   - Encryption Mode = 1 (AES-GCM)
+   - Pre-shared Key = "secret"
+   - Click "Set Role"
+
+2. Device B (Attacker):
+   - Select "attacker"
+   - Attack Mode = Modify plaintext
+   - Click "Set Role"
+
+3. Device C (Sender):
+   - Select "sender"
+   - Target IP = Attacker's IP
+   - Encryption Mode = 1 (AES-GCM)
+   - Pre-shared Key = "secret"
+   - Click "Set Role"
+
+4. Device C sends message
+5. Device B (Attacker) sees: "✗ ATTACK FAILED: Modify attack failed: message is encrypted"
+6. Device A (Receiver) sees: "✗ ATTACK FAILED: Integrity check failed - tampering detected"
+
+================================================================================
+7. TROUBLESHOOTING
+================================================================================
+
+PROBLEM: "Handshake not complete" error when trying to send
+-----------------------------------------------------------
+SOLUTION:
+- Wait for status to show "Handshake complete - encrypted"
+- Check that Receiver is running and listening
+- Verify Target IP and Port are correct
+- Ensure Encryption Mode and Key Exchange match between Sender and Receiver
+- If using PSK, verify both have exact same Pre-shared Key
+
+PROBLEM: Connection fails / Cannot connect
+-------------------------------------------
+SOLUTION:
+- Verify both devices are on same network (LAN/WiFi)
+- Check firewall settings (port 12347 must be open)
+- Verify Target IP is correct (use Local IP display)
+- Try using "Auto discover" button to find devices
+- Ensure Receiver clicked "Set Role" before Sender tries to connect
+
+PROBLEM: Messages not received
+-------------------------------
+SOLUTION:
+- Check that handshake completed on both sides
+- Verify Encryption Mode matches exactly
+- Verify Key Exchange matches exactly
+- If using PSK, verify both have same Pre-shared Key
+- Check chat log for error messages
+- If using Attacker, check Attacker's chat log for dropped packets
+
+PROBLEM: Attack not working / Attack always fails
+--------------------------------------------------
+SOLUTION:
+- For Modify attack: Sender must use Encryption Mode 0 (Plaintext)
+- For Replay attack: Only works on plaintext or if sequence numbers disabled
+- For Downgrade: Usually fails (this is expected - shows security works)
+- Check Attacker's chat log for specific failure reason
+- Verify Attack Mode is set correctly
+- Verify attack parameters (Modify Text, Drop Rate, etc.) are set
+
+PROBLEM: Role selection prompt keeps appearing
+-----------------------------------------------
+SOLUTION:
+- You must select a role on startup
+- Type exactly: "sender", "receiver", or "attacker" (lowercase)
+- If you cancel, refresh page and select role
+
+PROBLEM: Wrong sections showing / Can't see options
+-------------------------------------------------
+SOLUTION:
+- Only sections relevant to your role are shown
+- Sender: Network, Security, Chat (with input)
+- Receiver: Network, Security, Chat (no input)
+- Attacker: Network, Security, Chat (no input), Attacker Controls
+- Click "Set Role" button after selecting role to apply
+
+PROBLEM: Status shows "Disconnected from local control server"
+---------------------------------------------------------------
+SOLUTION:
+- Refresh the page
+- Ensure server is running (npm start)
+- Check that you're accessing correct URL (http://localhost:3000 or http://<server-ip>:3000)
+
+PROBLEM: Messages appear encrypted/hex in chat log
+--------------------------------------------------
+SOLUTION:
+- This is normal for Attacker role - Attacker sees ciphertext
+- For Sender/Receiver, messages should appear as plain text after decryption
+- If Sender/Receiver see hex, check Encryption Mode settings
+
+================================================================================
+QUICK REFERENCE
+================================================================================
+
+SENDER CHECKLIST:
+□ Selected "sender" role
+□ Entered Receiver/Attacker IP in Target IP
+□ Set Port (default 12347)
+□ Selected Encryption Mode (matches Receiver)
+□ Selected Key Exchange (matches Receiver)
+□ Entered Pre-shared Key if using PSK (matches Receiver)
+□ Clicked "Set Role"
+□ Waited for "Handshake complete"
+□ Typed message and clicked Send
+
+RECEIVER CHECKLIST:
+□ Selected "receiver" role
+□ Noted Local IP address
+□ Set Port (default 12347)
+□ Selected Encryption Mode (matches Sender)
+□ Selected Key Exchange (matches Sender)
+□ Entered Pre-shared Key if using PSK (matches Sender)
+□ Clicked "Set Role"
+□ Waited for "Receiver listening"
+□ Waiting for Sender to connect
+
+ATTACKER CHECKLIST:
+□ Selected "attacker" role
+□ Noted Local IP address (share with Sender)
+□ Entered Receiver IP in Target IP
+□ Set Port (default 12347)
+□ Selected Attack Mode
+□ Configured attack parameters (if needed)
+□ Clicked "Set Role"
+□ Told Sender to connect to Attacker's IP (not Receiver's IP)
+
+================================================================================
+END OF GUIDE
+================================================================================
+
+For technical details, see README.md
+For step-by-step test cases, see USAGE.md
+

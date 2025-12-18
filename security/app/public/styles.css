@@ -1,0 +1,109 @@
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  margin: 0;
+  padding: 0;
+  background: #f6f7fb;
+}
+
+.container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+h1 {
+  font-size: 1.6rem;
+  margin-bottom: 8px;
+}
+
+section {
+  background: #ffffff;
+  padding: 12px;
+  margin-top: 12px;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+label {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.9rem;
+}
+
+input,
+select,
+button {
+  margin-top: 2px;
+  padding: 6px 8px;
+  font-size: 0.9rem;
+}
+
+button {
+  cursor: pointer;
+}
+
+#status {
+  font-size: 0.9rem;
+  margin-bottom: 4px;
+}
+
+.log {
+  background: #111;
+  color: #eaeaea;
+  min-height: 160px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
+  font-size: 0.8rem;
+}
+
+#chat-input-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+#chat-input-row input {
+  flex: 1;
+}
+
+.message-sent {
+  color: #4a9eff;
+}
+
+.message-received {
+  color: #4caf50;
+}
+
+.attack-success {
+  color: #ff6b6b;
+  font-weight: bold;
+}
+
+.attack-failed {
+  color: #ffa726;
+  font-weight: bold;
+}
+
+.role-selected {
+  color: #9c27b0;
+  font-weight: bold;
+}
+
+.success {
+  color: #4caf50;
+}
+
+.error {
+  color: #f44336;
+}
+
+@media (max-width: 600px) {
+  .container {
+    padding: 8px;
+  }
+}
+
+
