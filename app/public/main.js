@@ -242,9 +242,17 @@ setRoleBtn.onclick = () => {
 
 connectBtn.onclick = () => {
   ensureWs();
-  if (currentRole !== "sender") {
-    logLine("Only sender can connect", "error");
+  
+  // Check role from dropdown, not just currentRole variable
+  const role = roleSelect.value;
+  if (role !== "sender") {
+    logLine("Only sender role can connect. Please select 'Sender' role first.", "error");
     return;
+  }
+  
+  // Update currentRole if it's not set
+  if (!currentRole) {
+    currentRole = role;
   }
   
   const targetIp = document.getElementById("target-ip").value.trim();
@@ -266,6 +274,7 @@ connectBtn.onclick = () => {
   ws.send(
     JSON.stringify({
       type: "connect",
+      role: "sender", // Explicitly send role
       config: {
         targetIp,
         port,

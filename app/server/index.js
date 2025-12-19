@@ -92,10 +92,15 @@ wss.on("connection", (ws) => {
           }
           
           // Broadcast presence immediately and then periodically
-          broadcastPresence(discovery, currentRole, port);
-          broadcastInterval = setInterval(() => {
+          // Only broadcast if we have a valid role
+          if (currentRole && currentRole !== "unknown") {
             broadcastPresence(discovery, currentRole, port);
-          }, 3000); // Broadcast every 3 seconds
+            broadcastInterval = setInterval(() => {
+              if (discovery && discovery.socket) {
+                broadcastPresence(discovery, currentRole, port);
+              }
+            }, 3000); // Broadcast every 3 seconds
+          }
           
           ws.send(JSON.stringify({ type: "status", status: `Role set to ${currentRole}` }));
           break;
@@ -104,14 +109,28 @@ wss.on("connection", (ws) => {
           const cfg = msg.config || {};
           const port = cfg.port || 12347;
           
-          if (!discovery) {
-            discovery = startDiscovery(currentRole, port);
+          // Start discovery if not already started (even without a role set)
+          if (!discovery || !discovery.socket) {
+            discovery = startDiscovery(currentRole || "unknown", port);
+          } else {
+            // Update role/port if changed
+            discovery.currentRole = currentRole || "unknown";
+            discovery.currentPort = port;
           }
+          
           // Clear previous results before new discovery
           if (discovery.peers) {
             discovery.peers.clear();
           }
+          
+          // Send probe and wait for responses
           const results = await sendDiscoveryPing(discovery);
+          
+          // Also broadcast our own presence so others can discover us
+          if (currentRole) {
+            broadcastPresence(discovery, currentRole, port);
+          }
+          
           ws.send(
             JSON.stringify({
               type: "discoveryResults",
@@ -121,12 +140,45 @@ wss.on("connection", (ws) => {
           break;
         }
         case "connect": {
-          if (currentRole !== "sender") {
-            ws.send(JSON.stringify({ type: "error", error: "Only sender can connect" }));
+          // Allow role to be specified in the connect message
+          const requestedRole = msg.role || currentRole;
+          if (requestedRole !== "sender") {
+            ws.send(JSON.stringify({ type: "error", error: "Only sender can connect. Please set role to 'Sender' first." }));
             break;
           }
+          
+          // If role is not set or doesn't match, configure it first
+          if (currentRole !== "sender" || !roleInstance) {
+            // Auto-configure sender role if not set
+            currentRole = "sender";
+            if (roleInstance && roleInstance.stop) {
+              await roleInstance.stop();
+            }
+            const cfg = msg.config || {};
+            const port = cfg.port || 12347;
+            
+            // Start discovery if not already started
+            if (!discovery || !discovery.socket) {
+              discovery = startDiscovery("sender", port);
+            } else {
+              discovery.currentRole = "sender";
+              discovery.currentPort = port;
+            }
+            
+            roleInstance = createSender(cfg, ws);
+            
+            // Broadcast presence
+            broadcastPresence(discovery, "sender", port);
+            if (broadcastInterval) {
+              clearInterval(broadcastInterval);
+            }
+            broadcastInterval = setInterval(() => {
+              broadcastPresence(discovery, "sender", port);
+            }, 3000);
+          }
+          
           if (!roleInstance || !roleInstance.connect) {
-            ws.send(JSON.stringify({ type: "error", error: "Role not configured. Please set role first." }));
+            ws.send(JSON.stringify({ type: "error", error: "Role not ready. Please wait a moment and try again." }));
             break;
           }
           const cfg = msg.config || {};
