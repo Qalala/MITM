@@ -4,3 +4,5 @@
 [2025-12-19T12:23:44.687Z] [sender] Sender stopped and socket closed
 [2025-12-19T12:30:55.371Z] [sender] Failed to connect: connect ETIMEDOUT 192.168.1.10:12347
 [2025-12-19T12:30:55.372Z] [sender] Sender stopped and socket closed
+[2025-12-19T12:41:27.484Z] [sender] Failed to connect: connect ETIMEDOUT 192.168.1.10:12347
+[2025-12-19T12:41:27.484Z] [sender] Sender stopped and socket closed

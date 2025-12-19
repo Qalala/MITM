@@ -7,7 +7,7 @@ const sendBtn = document.getElementById("send-btn");
 const chatInput = document.getElementById("chat-input");
 const discoverBtn = document.getElementById("discover-btn");
 const refreshBtn = document.getElementById("refresh-btn");
-const connectBtn = document.getElementById("connect-btn");
+const connectBtn = document.getElementById("connect-btn"); // Button removed from UI but kept for compatibility
 const discoverResults = document.getElementById("discover-results");
 
 let ws;
@@ -42,8 +42,8 @@ function showRoleSections(role) {
     document.getElementById("chat-section").style.display = "block";
     // Show chat input for sender
     document.getElementById("chat-input-row").style.display = "flex";
-    // Show Connect button for sender
-    connectBtn.style.display = "inline-block";
+    // Connect button removed - sender auto-connects
+    connectBtn.style.display = "none";
   } else if (role === "receiver") {
     document.getElementById("network-section").style.display = "block";
     document.getElementById("receiver-security-section").style.display = "block";
@@ -71,10 +71,20 @@ async function initInfo() {
   try {
     const res = await fetch("/api/info");
     const info = await res.json();
-    localIpEl.textContent = info.localIp + ":" + info.defaultPort + " (TCP)";
+    const targetPort = parseInt(document.getElementById("target-port")?.value || info.defaultPort, 10);
+    localIpEl.textContent = info.localIp + ":" + targetPort + " (TCP)";
     
     // Set default values (no restoration from localStorage)
     document.getElementById("target-port").value = info.defaultPort;
+    
+    // Update local IP display when port changes
+    const targetPortInput = document.getElementById("target-port");
+    if (targetPortInput) {
+      targetPortInput.addEventListener("input", () => {
+        const port = parseInt(targetPortInput.value, 10) || info.defaultPort;
+        localIpEl.textContent = info.localIp + ":" + port + " (TCP)";
+      });
+    }
     document.getElementById("target-ip").value = "";
     document.getElementById("enc-mode").value = "0";
     document.getElementById("kx-mode").value = "psk";
@@ -162,7 +172,7 @@ function ensureWs() {
   };
 }
 
-setRoleBtn.onclick = () => {
+setRoleBtn.onclick = async () => {
   ensureWs();
   const role = roleSelect.value;
   if (!role) {
@@ -222,6 +232,11 @@ setRoleBtn.onclick = () => {
   // Clear chat log when setting new role
   chatLog.innerHTML = "";
   logLine(`Setting role to: ${role}`, "role-selected");
+  
+  // Update local port display to show the port being used
+  const res = await fetch("/api/info");
+  const info = await res.json();
+  localIpEl.textContent = info.localIp + ":" + port + " (TCP)";
 
   ws.send(
     JSON.stringify({
@@ -231,61 +246,13 @@ setRoleBtn.onclick = () => {
     })
   );
   
-  // Auto-connect sender if target IP is provided
-  if (role === "sender" && targetIp) {
-    // Small delay to ensure role is configured first
-    setTimeout(() => {
-      connectBtn.click();
-    }, 100);
-  }
+  // Sender will auto-connect on the server side if target IP is provided or discovered
 };
 
+// Connect button removed - sender auto-connects when role is set
+// This function is kept for backward compatibility but should not be called
 connectBtn.onclick = () => {
-  ensureWs();
-  
-  // Check role from dropdown, not just currentRole variable
-  const role = roleSelect.value;
-  if (role !== "sender") {
-    logLine("Only sender role can connect. Please select 'Sender' role first.", "error");
-    return;
-  }
-  
-  // Update currentRole if it's not set
-  if (!currentRole) {
-    currentRole = role;
-  }
-  
-  const targetIp = document.getElementById("target-ip").value.trim();
-  if (!targetIp) {
-    logLine("Please enter a target IP address", "error");
-    return;
-  }
-  
-  const port = parseInt(document.getElementById("target-port").value, 10) || 12347;
-  const transport = document.getElementById("transport").value;
-  const encMode = parseInt(document.getElementById("enc-mode").value, 10);
-  const kxMode = document.getElementById("kx-mode").value;
-  const psk = document.getElementById("psk-input").value;
-  const demo = document.getElementById("demo-mode").checked;
-  
-  handshakeComplete = false;
-  logLine(`Connecting to ${targetIp}:${port}...`, "role-selected");
-  
-  ws.send(
-    JSON.stringify({
-      type: "connect",
-      role: "sender", // Explicitly send role
-      config: {
-        targetIp,
-        port,
-        transport,
-        encMode,
-        kxMode,
-        psk,
-        demo
-      }
-    })
-  );
+  logLine("Auto-connect is enabled. Set role to sender and enter target IP to connect automatically.", "error");
 };
 
 refreshBtn.onclick = () => {
@@ -368,9 +335,46 @@ function displayDiscoveryResults(results) {
       div.appendChild(roleSpan);
       div.appendChild(ipSpan);
       
-      div.onclick = () => {
+      div.onclick = async () => {
         document.getElementById("target-ip").value = ip;
+        document.getElementById("target-port").value = port;
+        // Update local port display
+        try {
+          const res = await fetch("/api/info");
+          const info = await res.json();
+          localIpEl.textContent = info.localIp + ":" + port + " (TCP)";
+        } catch (e) {
+          // Ignore errors
+        }
         logLine(`Selected discovered device: ${role} at ${ip}:${port}`, "success");
+        
+        // Auto-connect if sender role is already set
+        if (currentRole === "sender" && ws && ws.readyState === WebSocket.OPEN) {
+          const transport = document.getElementById("transport").value;
+          const encMode = parseInt(document.getElementById("enc-mode").value, 10);
+          const kxMode = document.getElementById("kx-mode").value;
+          const psk = document.getElementById("psk-input").value;
+          const demo = document.getElementById("demo-mode").checked;
+          
+          handshakeComplete = false;
+          logLine(`Auto-connecting to ${ip}:${port}...`, "role-selected");
+          
+          ws.send(
+            JSON.stringify({
+              type: "connect",
+              role: "sender",
+              config: {
+                targetIp: ip,
+                port: parseInt(port, 10),
+                transport,
+                encMode,
+                kxMode,
+                psk,
+                demo
+              }
+            })
+          );
+        }
       };
       
       discoverResults.appendChild(div);
