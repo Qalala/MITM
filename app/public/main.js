@@ -1010,6 +1010,41 @@ function setupAttackerIpListeners() {
   // Attacker uses target-ip field which already has listeners
 }
 
+// Function to handle connect to receiver button
+function setupConnectToReceiverButton() {
+  const connectToReceiverBtn = document.getElementById("connect-to-receiver-btn");
+  if (!connectToReceiverBtn) return;
+  
+  connectToReceiverBtn.onclick = () => {
+    ensureWs();
+    
+    if (currentRole !== "attacker") {
+      logLine("Only attacker role can connect to receiver", "error");
+      return;
+    }
+    
+    const targetIp = document.getElementById("target-ip").value.trim();
+    const port = parseInt(document.getElementById("target-port").value, 10) || 12347;
+    
+    if (!targetIp) {
+      logLine("Please enter victim's IP address (Target IP)", "error");
+      addAttackLog("Error: Victim IP (Target IP) is required", "failed");
+      return;
+    }
+    
+    logLine(`Connecting to receiver at ${targetIp}:${port}...`, "role-selected");
+    addAttackLog(`Connecting to receiver: ${targetIp}:${port}`, "info");
+    
+    ws.send(JSON.stringify({
+      type: "connectToReceiver",
+      config: {
+        targetIp,
+        port
+      }
+    }));
+  };
+}
+
 // Function to handle start attack button
 function setupStartAttackButton() {
   const startAttackBtn = document.getElementById("start-attack-btn");
@@ -1058,6 +1093,7 @@ if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => {
     setupSecurityListeners();
     setupAttackModeOptions();
+    setupConnectToReceiverButton();
     setupStartAttackButton();
     setupAttackerIpListeners();
   });

@@ -322,6 +322,25 @@ wss.on("connection", (ws) => {
           }
           break;
         }
+        case "connectToReceiver": {
+          if (currentRole !== "attacker") {
+            ws.send(JSON.stringify({ type: "error", error: "Only attacker role can connect to receiver" }));
+            break;
+          }
+          
+          if (!roleInstance) {
+            ws.send(JSON.stringify({ type: "error", error: "Attacker role not configured. Please set role to 'Attacker' first." }));
+            break;
+          }
+          
+          const cfg = msg.config || {};
+          if (roleInstance && roleInstance.connectToReceiver) {
+            await roleInstance.connectToReceiver(cfg);
+          } else {
+            ws.send(JSON.stringify({ type: "error", error: "Connect to receiver functionality not available" }));
+          }
+          break;
+        }
         case "startAttack": {
           if (currentRole !== "attacker") {
             ws.send(JSON.stringify({ type: "error", error: "Only attacker role can start attacks" }));

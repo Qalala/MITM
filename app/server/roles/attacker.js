@@ -164,28 +164,33 @@ function createAttacker(config, ws) {
       return;
     }
     
-    // Forward to receiver's actual IP address
-    // Attacker and receiver are on different machines (normal case)
-    const forwardIp = actualTargetIp;
+    // Check if receiver is already connected
+    if (!receiverReady || !serverConn || serverConn.destroyed) {
+      logAttack(`[MITM] Receiver not connected yet. Please click 'Connect to Receiver' first.`, "warning");
+      logAttack(`[MITM] Sender connection will be closed. Connect to receiver, then have sender reconnect.`, "warning");
+      sendUi(ws, { type: "error", error: "Receiver not connected. Please click 'Connect to Receiver' button first, then have sender reconnect." });
+      try {
+        if (clientConn) {
+          clientConn.end();
+          clientConn.destroy();
+        }
+      } catch {}
+      clientConn = null;
+      isHandlingClient = false;
+      return;
+    }
     
-    logAttack(`Sender connected to attacker, connecting to real receiver at ${forwardIp}:${targetPort}`, "info");
+    logAttack(`[MITM] Sender connected to attacker`, "success");
     logAttack(`[MITM] Attacker is in the middle: Sender -> Attacker -> Receiver`, "success");
     
-    // Start buffering frames from sender immediately (before receiver connection is ready)
+    // Start relaying frames from sender to receiver (receiver is already connected)
     const senderRelayPromise = (async () => {
       try {
         const frameIter = decodeFrames(clientConn);
         for await (const frame of frameIter) {
           if (!running || !clientConn) break;
           
-          // If receiver is not ready, buffer the frame
-          if (!receiverReady) {
-            senderFrameBuffer.push(frame);
-            logAttack(`[MITM] Buffering frame from sender (receiver not ready yet)`, "info");
-            continue;
-          }
-          
-          // Receiver is ready, process frame normally
+          // Receiver is ready (we checked above), process frame normally
           await processAndForwardFrame(frame, clientConn, serverConn, "sender->receiver");
         }
       } catch (e) {
@@ -195,38 +200,7 @@ function createAttacker(config, ws) {
       }
     })();
     
-    serverConn = new net.Socket();
-    
     try {
-      await new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error("Connection timeout - receiver not responding"));
-        }, 10000); // 10 second timeout
-        
-        serverConn.once("error", (err) => {
-          clearTimeout(timeout);
-          reject(err);
-        });
-        serverConn.once("connect", () => {
-          clearTimeout(timeout);
-          serverConn.removeAllListeners("error");
-          resolve();
-        });
-        serverConn.connect(targetPort, forwardIp);
-      });
-      
-      // Receiver connection established - process buffered frames first
-      logAttack(`[MITM] Receiver connection established, forwarding ${senderFrameBuffer.length} buffered frames`, "info");
-      
-      // Forward all buffered frames to receiver BEFORE marking as ready
-      // This ensures buffered frames are sent in order before new frames
-      for (const bufferedFrame of senderFrameBuffer) {
-        await processAndForwardFrame(bufferedFrame, clientConn, serverConn, "sender->receiver");
-      }
-      senderFrameBuffer = []; // Clear buffer
-      
-      // Now mark as ready so new frames can be processed immediately
-      receiverReady = true;
       // Activate attacks automatically when MITM connection is established
       if (!attackActive) {
         attackActive = true;
@@ -288,64 +262,14 @@ function createAttacker(config, ws) {
 
       clientConn.on("error", onClientError);
       clientConn.on("close", onClientClose);
-      serverConn.on("error", onServerError);
-      serverConn.on("close", onServerClose);
+      // Note: serverConn error/close handlers are already set up in connectToReceiver
 
-      // Start receiver->sender relay (receiver connection is already established)
-      const relayPromise2 = relay(serverConn, clientConn, "receiver->sender").catch((e) => {
-        logUi(ws, "attacker", `Relay error (r->s): ${e.message}`);
-      }).finally(() => {
-        // When one relay stops, cleanup the other
-        cleanupConnections();
-      });
-      
-      // Wait for sender relay to complete (it's already running and buffering)
+      // Wait for sender relay to complete
       senderRelayPromise.catch((e) => {
         logUi(ws, "attacker", `Sender relay error: ${e.message}`);
       }).finally(() => {
         cleanupConnections();
       });
-    } catch (e) {
-      const errorMsg = e.message || "Unknown error";
-      logAttack(`[MITM] Failed to connect to receiver at ${actualTargetIp}:${targetPort}: ${errorMsg}`, "failed");
-      logAttack(`[MITM] Troubleshooting:`, "warning");
-      logAttack(`[MITM] 1. Ensure receiver is running and listening on ${actualTargetIp}:${targetPort}`, "warning");
-      logAttack(`[MITM] 2. Check that receiver IP (${actualTargetIp}) is correct`, "warning");
-      logAttack(`[MITM] 3. Verify both devices are on the same network`, "warning");
-      logAttack(`[MITM] 4. Check firewall settings on receiver device`, "warning");
-      sendUi(ws, { type: "error", error: `Failed to connect to receiver: ${errorMsg}. Check that receiver is running on ${actualTargetIp}:${targetPort} and IP is correct.` });
-      
-      // Don't immediately close sender connection - give it a chance to retry
-      // Instead, send an error frame to the sender so it knows what happened
-      try {
-        if (clientConn && !clientConn.destroyed) {
-          // Send error frame to sender to inform about receiver connection failure
-          const errorPayload = Buffer.from(JSON.stringify({ 
-            reason: "receiver_unavailable", 
-            message: `Attacker could not connect to receiver at ${actualTargetIp}:${targetPort}` 
-          }), "utf8");
-          clientConn.write(encodeFrame(FRAME_TYPES.ERROR, errorPayload));
-          // Give sender time to read the error before closing
-          setTimeout(() => {
-            try {
-              if (clientConn && !clientConn.destroyed) {
-                clientConn.end();
-                clientConn.destroy();
-              }
-            } catch {}
-          }, 1000);
-        }
-        if (serverConn) {
-          serverConn.end();
-          serverConn.destroy();
-        }
-      } catch {}
-      clientConn = null;
-      serverConn = null;
-      receiverReady = false;
-      senderFrameBuffer = [];
-      isHandlingClient = false;
-    }
   }
   
   // Helper function to process and forward a frame with attack logic
@@ -584,6 +508,121 @@ function createAttacker(config, ws) {
     }
   }
 
+  async function connectToReceiver(connectConfig) {
+    // Proactively connect to receiver (before sender connects)
+    if (connectConfig && connectConfig.targetIp) {
+      targetIp = connectConfig.targetIp;
+    }
+    
+    if (!targetIp) {
+      logAttack("ERROR: Victim IP (target IP) is required. Please enter victim's IP address.", "failed");
+      sendUi(ws, { type: "error", error: "Victim IP is required. Please enter the target IP address." });
+      return;
+    }
+    
+    // Clean up existing receiver connection if any
+    if (serverConn) {
+      try {
+        serverConn.end();
+        serverConn.destroy();
+      } catch {}
+      serverConn = null;
+    }
+    
+    receiverReady = false;
+    senderFrameBuffer = [];
+    
+    const forwardIp = targetIp;
+    logAttack(`[MITM] Connecting to receiver at ${forwardIp}:${targetPort}...`, "info");
+    
+    serverConn = new net.Socket();
+    
+    try {
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error("Connection timeout - receiver not responding"));
+        }, 10000); // 10 second timeout
+        
+        serverConn.once("error", (err) => {
+          clearTimeout(timeout);
+          reject(err);
+        });
+        serverConn.once("connect", () => {
+          clearTimeout(timeout);
+          serverConn.removeAllListeners("error");
+          resolve();
+        });
+        serverConn.connect(targetPort, forwardIp);
+      });
+      
+      // Receiver connection established
+      receiverReady = true;
+      logAttack(`[MITM] Successfully connected to receiver at ${forwardIp}:${targetPort}`, "success");
+      logAttack(`[MITM] Ready to intercept sender connections`, "info");
+      sendUi(ws, { type: "status", status: `Connected to receiver at ${forwardIp}:${targetPort}. Waiting for sender to connect...` });
+      
+      // Set up error handlers for receiver connection
+      serverConn.on("error", (err) => {
+        logAttack(`Receiver connection error: ${err.message}`, "failed");
+        receiverReady = false;
+        serverConn = null;
+        sendUi(ws, { type: "error", error: `Receiver connection lost: ${err.message}` });
+      });
+      
+      serverConn.on("close", () => {
+        logAttack("Receiver connection closed", "warning");
+        receiverReady = false;
+        serverConn = null;
+        sendUi(ws, { type: "status", status: "Receiver connection closed. Click 'Connect to Receiver' to reconnect." });
+      });
+      
+      // Start listening for frames from receiver (for relay back to sender)
+      // This will be used when sender connects
+      (async () => {
+        try {
+          if (serverConn && !serverConn.destroyed) {
+            const frameIter = decodeFrames(serverConn);
+            for await (const frame of frameIter) {
+              if (!running || !serverConn || serverConn.destroyed) break;
+              
+              // If sender is not connected yet, we can't forward - just log
+              if (!clientConn || clientConn.destroyed) {
+                logAttack(`[MITM] Received frame from receiver but sender not connected yet`, "warning");
+                continue;
+              }
+              
+              // Forward to sender
+              await processAndForwardFrame(frame, serverConn, clientConn, "receiver->sender");
+            }
+          }
+        } catch (e) {
+          if (running && serverConn) {
+            logAttack(`Receiver relay error: ${e.message}`, "failed");
+          }
+        }
+      })();
+      
+    } catch (e) {
+      const errorMsg = e.message || "Unknown error";
+      logAttack(`[MITM] Failed to connect to receiver at ${forwardIp}:${targetPort}: ${errorMsg}`, "failed");
+      logAttack(`[MITM] Troubleshooting:`, "warning");
+      logAttack(`[MITM] 1. Ensure receiver is running and listening on ${forwardIp}:${targetPort}`, "warning");
+      logAttack(`[MITM] 2. Check that receiver IP (${forwardIp}) is correct`, "warning");
+      logAttack(`[MITM] 3. Verify both devices are on the same network`, "warning");
+      logAttack(`[MITM] 4. Check firewall settings on receiver device`, "warning");
+      sendUi(ws, { type: "error", error: `Failed to connect to receiver: ${errorMsg}. Check that receiver is running on ${forwardIp}:${targetPort} and IP is correct.` });
+      
+      if (serverConn) {
+        try {
+          serverConn.end();
+          serverConn.destroy();
+        } catch {}
+        serverConn = null;
+      }
+      receiverReady = false;
+    }
+  }
+
   async function startAttack(attackConfig) {
     // Update target IP from config (victim's IP - the receiver that attacker proxies to)
     if (attackConfig.targetIp) {
@@ -674,6 +713,9 @@ function createAttacker(config, ws) {
     async startAttack(config) {
       await startAttack(config);
     },
+    async connectToReceiver(config) {
+      await connectToReceiver(config);
+    },
     async updateAttackConfig(newConfig) {
       updateAttackConfig(newConfig);
     },
@@ -682,10 +724,10 @@ function createAttacker(config, ws) {
       updateAttackConfig(newConfig);
     },
     checkHandshake() {
-      const isComplete = clientConn && serverConn;
+      const isComplete = clientConn && serverConn && receiverReady;
       return {
         complete: isComplete,
-        status: isComplete ? "MITM relay active - connections established" : (clientConn || serverConn ? "Partial connection..." : attackActive ? "Attack active, waiting for connections..." : "Waiting for connections...")
+        status: isComplete ? "MITM relay active - connections established" : (serverConn && receiverReady ? "Receiver connected, waiting for sender..." : (clientConn ? "Sender connected, receiver not ready..." : (receiverReady ? "Receiver ready, waiting for sender..." : "Waiting for connections...")))
       };
     }
   };
