@@ -6,3 +6,30 @@
 [2025-12-19T12:30:55.372Z] [sender] Sender stopped and socket closed
 [2025-12-19T12:41:27.484Z] [sender] Failed to connect: connect ETIMEDOUT 192.168.1.10:12347
 [2025-12-19T12:41:27.484Z] [sender] Sender stopped and socket closed
+[2025-12-19T12:48:10.514Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T12:48:10.569Z] [sender] Failed to connect: PSK key required
+[2025-12-19T12:48:10.569Z] [sender] Sender stopped and socket closed
+[2025-12-19T12:48:29.296Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T12:48:29.348Z] [sender] Failed to connect: PSK key required
+[2025-12-19T12:48:29.349Z] [sender] Sender stopped and socket closed
+[2025-12-19T12:48:51.723Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T12:49:03.380Z] [sender] Failed to connect: Premature close
+[2025-12-19T12:49:03.381Z] [sender] Sender stopped and socket closed
+[2025-12-19T12:49:03.398Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T12:49:14.553Z] [sender] Failed to connect: Premature close
+[2025-12-19T12:49:14.553Z] [sender] Sender stopped and socket closed
+[2025-12-19T12:49:14.555Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T12:49:38.635Z] [sender] Failed to connect: Premature close
+[2025-12-19T12:49:38.636Z] [sender] Sender stopped and socket closed
+[2025-12-19T12:49:38.722Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T12:49:38.754Z] [sender] Failed to connect: Expected NEGOTIATE frame
+[2025-12-19T12:49:38.755Z] [sender] Sender stopped and socket closed
+[2025-12-19T12:49:50.088Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T12:49:50.111Z] [sender] Sender stopped and socket closed
+[2025-12-19T12:49:50.110Z] [sender] Failed to connect: Expected NEGOTIATE frame
+[2025-12-19T12:50:15.996Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T12:50:16.006Z] [sender] Failed to connect: Expected NEGOTIATE frame
+[2025-12-19T12:50:16.006Z] [sender] Sender stopped and socket closed
+[2025-12-19T12:50:30.743Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T12:51:08.441Z] [sender] Failed to connect: read ECONNRESET
+[2025-12-19T12:51:08.442Z] [sender] Sender stopped and socket closed

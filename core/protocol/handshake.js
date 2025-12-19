@@ -92,10 +92,14 @@ function senderProcessKeyExchange(encMode, kxMode, keyExchangePayload, options) 
     );
   } else if (kxMode === KX_MODES.PSK) {
     // PSK must be provided in options.psk (Buffer)
-    if (!options || !options.psk || !Buffer.isBuffer(options.psk)) {
+    // For plaintext mode, PSK is optional but if provided it should be used
+    if (options && options.psk && Buffer.isBuffer(options.psk)) {
+      stateUpdate.sessionKey = options.psk;
+    } else if (encMode !== 0) {
+      // For encrypted modes, PSK is required
       throw new Error("PSK key required");
     }
-    stateUpdate.sessionKey = options.psk;
+    // For plaintext mode without PSK, no sessionKey is set (which is fine)
   }
 
   return { responsePayload, stateUpdate };
@@ -117,7 +121,11 @@ function receiverFinalizeKeyExchange(encMode, kxMode, responsePayload, state) {
     const secret = computeSecret(state.dh, otherPub);
     stateUpdate.sharedSecret = secret;
   } else if (kxMode === KX_MODES.PSK) {
-    // Already shared via config.
+    // PSK is shared via config - set sessionKey from state.psk if available
+    // For plaintext mode, PSK might be optional, but if provided it should be set
+    if (state.psk && Buffer.isBuffer(state.psk)) {
+      stateUpdate.sessionKey = state.psk;
+    }
   }
 
   return stateUpdate;

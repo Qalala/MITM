@@ -63,10 +63,15 @@ function createSender(config, ws) {
     if (responsePayload) {
       socket.write(encodeFrame(FRAME_TYPES.KEY_EXCHANGE, responsePayload));
     }
-    sessionKey = stateUpdate.sessionKey;
-    sharedSecret = stateUpdate.sharedSecret;
+      sessionKey = stateUpdate.sessionKey;
+      sharedSecret = stateUpdate.sharedSecret;
+      
+      // For PSK mode with plaintext, ensure sessionKey is set from PSK if provided
+      if (connectKxMode === KX_MODES.PSK && connectEncMode === ENC_MODES.PLAINTEXT && connectPsk && !sessionKey) {
+        sessionKey = connectPsk;
+      }
 
-    const ack = await frameIter.next();
+      const ack = await frameIter.next();
     if (ack.done || ack.value.type !== FRAME_TYPES.ACK) {
       throw new Error("Expected ACK after key exchange");
     }
@@ -125,6 +130,24 @@ function createSender(config, ws) {
           iv: iv.toString("base64"),
           ciphertext: ciphertext.toString("base64"),
           mac: mac.toString("base64")
+        }),
+        "utf8"
+      );
+    }
+
+    if (useEncMode === ENC_MODES.DIFFIE_HELLMAN) {
+      // DIFFIE_HELLMAN mode uses sharedSecret as symmetric key with AES-GCM
+      if (!key) {
+        throw new Error("Shared secret not available for Diffie-Hellman encryption");
+      }
+      const nonce = generateNonce();
+      const { ciphertext, tag } = encryptGcm(key, nonce, pt, aad);
+      return Buffer.from(
+        JSON.stringify({
+          seq,
+          nonce: nonce.toString("base64"),
+          ciphertext: ciphertext.toString("base64"),
+          tag: tag.toString("base64")
         }),
         "utf8"
       );
@@ -227,6 +250,11 @@ function createSender(config, ws) {
       }
       sessionKey = stateUpdate.sessionKey;
       sharedSecret = stateUpdate.sharedSecret;
+      
+      // For PSK mode with plaintext, ensure sessionKey is set from PSK if provided
+      if (connectKxMode === KX_MODES.PSK && connectEncMode === ENC_MODES.PLAINTEXT && connectPsk && !sessionKey) {
+        sessionKey = connectPsk;
+      }
 
       const ack = await frameIter.next();
       if (ack.done || ack.value.type !== FRAME_TYPES.ACK) {
@@ -273,10 +301,17 @@ function createSender(config, ws) {
       sendUi(ws, { type: "messageSent", text });
     },
     checkHandshake() {
-      const isComplete = socket && handshakeDone && (sessionKey || sharedSecret);
+      // For plaintext mode, handshake is complete if connection exists and handshakeDone is true
+      // For encrypted modes (AES-GCM, AES-CBC+HMAC), we need sessionKey
+      // For Diffie-Hellman mode, we need sharedSecret
+      const isComplete = socket && handshakeDone && (
+        encMode === ENC_MODES.PLAINTEXT || 
+        (encMode === ENC_MODES.DIFFIE_HELLMAN && sharedSecret) ||
+        (encMode !== ENC_MODES.DIFFIE_HELLMAN && (sessionKey || sharedSecret))
+      );
       return {
         complete: isComplete,
-        status: isComplete ? "Handshake complete - encrypted" : (socket ? "Handshake in progress..." : "Not connected")
+        status: isComplete ? "Handshake complete - encrypted" : (socket ? (handshakeDone ? "Handshake complete" : "Handshake in progress...") : "Not connected")
       };
     }
   };

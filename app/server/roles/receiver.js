@@ -33,6 +33,7 @@ function createReceiver(config, ws) {
   let sharedSecret = null;
   let seqIn = 0;
   let negotiatedEncMode = null; // The encryption mode negotiated with the sender
+  let handshakeDone = false; // Track handshake completion
 
   (async () => {
     try {
@@ -61,6 +62,7 @@ function createReceiver(config, ws) {
     sessionKey = null;
     sharedSecret = null;
     seqIn = 0;
+    handshakeDone = false;
     
     logUi(ws, "receiver", "Client connected, starting handshake");
     const state = {};
@@ -103,6 +105,8 @@ function createReceiver(config, ws) {
       conn.write(encodeFrame(FRAME_TYPES.NEGOTIATE, buildNegotiate(negotiatedEncMode, kxMode)));
 
       // KEY_EXCHANGE from receiver
+      // Store PSK in state for finalize function
+      state.psk = psk;
       const { payload: kxPayload, stateUpdate } = receiverBuildKeyExchange(negotiatedEncMode, kxMode, {
         psk
       });
@@ -123,8 +127,14 @@ function createReceiver(config, ws) {
 
       sessionKey = state.sessionKey;
       sharedSecret = state.sharedSecret;
+      
+      // For PSK mode with plaintext, set sessionKey from config if not already set
+      if (kxMode === KX_MODES.PSK && negotiatedEncMode === ENC_MODES.PLAINTEXT && psk && !sessionKey) {
+        sessionKey = psk;
+      }
 
       conn.write(encodeFrame(FRAME_TYPES.ACK, Buffer.from(JSON.stringify({ ok: true }))));
+      handshakeDone = true; // Mark handshake as complete
       logUi(ws, "receiver", "Handshake complete, ready to receive data");
       sendUi(ws, { type: "status", status: "Handshake complete - encrypted" });
 
@@ -157,6 +167,7 @@ function createReceiver(config, ws) {
       sessionKey = null;
       sharedSecret = null;
       seqIn = 0;
+      handshakeDone = false;
       sendUi(ws, { type: "status", status: `Receiver listening on ${bindIp}:${port}` });
     }
   }
@@ -193,7 +204,8 @@ function createReceiver(config, ws) {
         const ct = Buffer.from(obj.ciphertext, "base64");
         const tag = Buffer.from(obj.tag, "base64");
         const aad = Buffer.concat([Buffer.from("DATA"), seqBuf]);
-        const plaintext = decryptGcm(sessionKey, nonce, ct, tag, aad);
+        const key = sessionKey || sharedSecret;
+        const plaintext = decryptGcm(key, nonce, ct, tag, aad);
         seqIn = obj.seq;
         const text = plaintext.toString("utf8");
         logUi(ws, "receiver", `RECV (AES-GCM): ${text}`);
@@ -222,6 +234,27 @@ function createReceiver(config, ws) {
         logUi(ws, "receiver", `MAC verification failed (AES-CBC+HMAC): ${e.message}`);
         sendUi(ws, { type: "attackFailed", message: `MAC verification failed - tampering detected (AES-CBC+HMAC)` });
       }
+    } else if (negotiatedEncMode === ENC_MODES.DIFFIE_HELLMAN) {
+      try {
+        // DIFFIE_HELLMAN mode uses sharedSecret as symmetric key with AES-GCM
+        const key = sharedSecret || sessionKey;
+        if (!key) {
+          throw new Error("Shared secret not available for Diffie-Hellman decryption");
+        }
+        const nonce = Buffer.from(obj.nonce, "base64");
+        const ct = Buffer.from(obj.ciphertext, "base64");
+        const tag = Buffer.from(obj.tag, "base64");
+        const aad = Buffer.concat([Buffer.from("DATA"), seqBuf]);
+        const plaintext = decryptGcm(key, nonce, ct, tag, aad);
+        seqIn = obj.seq;
+        const text = plaintext.toString("utf8");
+        logUi(ws, "receiver", `RECV (Diffie-Hellman): ${text}`);
+        sendUi(ws, { type: "log", message: `RECV: ${text}` });
+        sendUi(ws, { type: "messageReceived", text });
+      } catch (e) {
+        logUi(ws, "receiver", `Integrity check failed (Diffie-Hellman): ${e.message}`);
+        sendUi(ws, { type: "attackFailed", message: `Integrity check failed - tampering detected (Diffie-Hellman)` });
+      }
     }
   }
 
@@ -245,6 +278,7 @@ function createReceiver(config, ws) {
     sessionKey = null;
     sharedSecret = null;
     seqIn = 0;
+    handshakeDone = false;
     logUi(ws, "receiver", "Receiver stopped and sockets closed");
   }
 
@@ -256,10 +290,17 @@ function createReceiver(config, ws) {
       // Receiver does not send chat messages in this demo.
     },
     checkHandshake() {
-      const isComplete = conn && sessionKey;
+      // For plaintext mode, handshake is complete if connection exists and handshakeDone is true
+      // For encrypted modes (AES-GCM, AES-CBC+HMAC), we need sessionKey
+      // For Diffie-Hellman mode, we need sharedSecret
+      const isComplete = conn && handshakeDone && (
+        negotiatedEncMode === ENC_MODES.PLAINTEXT || 
+        (negotiatedEncMode === ENC_MODES.DIFFIE_HELLMAN && sharedSecret) ||
+        (negotiatedEncMode !== ENC_MODES.DIFFIE_HELLMAN && negotiatedEncMode !== null && (sessionKey || sharedSecret))
+      );
       return {
         complete: isComplete,
-        status: isComplete ? "Handshake complete - encrypted" : (conn ? "Handshake in progress..." : "Waiting for connection...")
+        status: isComplete ? "Handshake complete - encrypted" : (conn ? (handshakeDone ? "Handshake complete" : "Handshake in progress...") : "Waiting for connection...")
       };
     }
   };
