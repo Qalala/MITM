@@ -41,6 +41,9 @@
           <button id="refresh-btn">Refresh</button>
         </div>
         <div id="discover-results" class="log" style="min-height:60px;max-height:120px;"></div>
+        <div id="target-info" style="margin-top: 12px; padding: 8px; background: #2a2a2a; border-radius: 4px; display: none;">
+          <strong style="color: #4a9eff;">Destination:</strong> <span id="target-display">Not set</span>
+        </div>
       </section>
 
       <section id="security-section">
@@ -62,7 +65,11 @@
             <option value="dh">Diffie-Hellman</option>
           </select>
         </label>
-        <label>Pre-shared key (hex/string): <input id="psk-input" /></label>
+        <label>
+          Pre-shared key (hex/string): 
+          <input id="psk-input" placeholder="Enter PSK (required for encrypted modes)" />
+          <span id="psk-required-indicator" style="color: #ff6b6b; font-size: 0.9em; margin-left: 8px; display: none;">⚠ REQUIRED for sending encrypted messages</span>
+        </label>
         <label><input type="checkbox" id="demo-mode" /> Demo mode (show steps)</label>
       </section>
 
@@ -86,7 +93,11 @@
             <option value="dh">Diffie-Hellman</option>
           </select>
         </label>
-        <label>Pre-shared key (hex/string): <input id="receiver-psk-input" /></label>
+        <label>
+          Pre-shared key (hex/string): 
+          <input id="receiver-psk-input" placeholder="Enter PSK (required for encrypted modes)" />
+          <span id="receiver-psk-required-indicator" style="color: #ff6b6b; font-size: 0.9em; margin-left: 8px; display: none;">⚠ REQUIRED for receiving encrypted messages</span>
+        </label>
         <label><input type="checkbox" id="receiver-demo-mode" /> Demo mode (show steps)</label>
       </section>
 

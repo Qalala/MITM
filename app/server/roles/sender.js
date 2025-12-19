@@ -18,7 +18,7 @@ const { encryptGcm, generateNonce } = require("../../../core/crypto/aes_gcm");
 const { encryptCbcHmac, generateIv } = require("../../../core/crypto/aes_cbc_hmac");
 
 function createSender(config, ws) {
-  let targetIp = config.targetIp || "127.0.0.1";
+  let targetIp = config.targetIp || null; // No default, must be set
   let port = config.port || 12347;
   let transport = config.transport || "tcp";
   let demo = !!config.demo;
@@ -197,6 +197,16 @@ function createSender(config, ws) {
     const connectKxMode = kxMode;
     const connectPsk = psk;
     const connectDemo = demo;
+    
+    // Validate PSK for encrypted modes with PSK key exchange
+    if (connectKxMode === KX_MODES.PSK && connectEncMode !== ENC_MODES.PLAINTEXT) {
+      if (!connectPsk || (Buffer.isBuffer(connectPsk) ? connectPsk.length === 0 : String(connectPsk).length === 0)) {
+        const errorMsg = "PSK key is REQUIRED for encrypted modes. Please enter a pre-shared key before connecting.";
+        logUi(ws, "sender", errorMsg);
+        sendUi(ws, { type: "error", error: errorMsg });
+        return;
+      }
+    }
     
     // Log the actual values being used for connection
     logUi(ws, "sender", `Connecting with encryption mode: ${connectEncMode}, KX mode: ${connectKxMode}`);

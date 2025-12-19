@@ -127,6 +127,20 @@ function createReceiver(config, ws) {
         return;
       }
 
+      // Validate PSK for encrypted modes with PSK key exchange
+      if (kxMode === KX_MODES.PSK && encMode !== ENC_MODES.PLAINTEXT) {
+        if (!psk || (Buffer.isBuffer(psk) ? psk.length === 0 : String(psk).length === 0)) {
+          const errorMsg = "PSK key is REQUIRED for encrypted modes. Please enter a pre-shared key.";
+          logUi(ws, "receiver", errorMsg);
+          sendUi(ws, { type: "error", error: errorMsg });
+          const err = { reason: "psk_required", message: errorMsg };
+          conn.write(encodeFrame(FRAME_TYPES.ERROR, Buffer.from(JSON.stringify(err))));
+          conn.end();
+          conn = null;
+          return;
+        }
+      }
+
       // Use the receiver's configured decryption mode (must match sender)
       negotiatedEncMode = encMode;
       logUi(ws, "receiver", `Using decryption mode: ${negotiatedEncMode}`);

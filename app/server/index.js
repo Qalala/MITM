@@ -8,6 +8,7 @@ const { createSender } = require("./roles/sender");
 const { createReceiver } = require("./roles/receiver");
 const { createAttacker } = require("./roles/attacker");
 const { startDiscovery, stopDiscovery, sendDiscoveryPing, broadcastPresence } = require("./lan/discovery");
+const { initPythonCrypto } = require("../../scripts/startup_init");
 
 const app = express();
 const server = http.createServer(app);
@@ -97,10 +98,17 @@ wss.on("connection", (ws) => {
           // Broadcast presence immediately and then periodically
           // CRITICAL: ALL roles (including sender) must broadcast so they can be discovered
           if (currentRole && currentRole !== "unknown") {
-            broadcastPresence(discovery, currentRole, port);
+            // Include encryption info for sender/receiver only
+            let encInfo = null;
+            if ((currentRole === "sender" || currentRole === "receiver") && cfg.encMode !== undefined && cfg.kxMode) {
+              encInfo = { encMode: cfg.encMode, kxMode: cfg.kxMode };
+              discovery.encInfo = encInfo;
+            }
+            broadcastPresence(discovery, currentRole, port, encInfo);
             broadcastInterval = setInterval(() => {
               if (discovery && discovery.socket) {
-                broadcastPresence(discovery, currentRole, port);
+                const currentEncInfo = discovery.encInfo;
+                broadcastPresence(discovery, currentRole, port, currentEncInfo);
               }
             }, 3000); // Broadcast every 3 seconds
           }
@@ -226,6 +234,14 @@ wss.on("connection", (ws) => {
           
           const cfg = msg.config || {};
           
+          // Update encryption info in discovery for broadcasting (sender/receiver only)
+          if ((currentRole === "sender" || currentRole === "receiver") && discovery && cfg.encMode !== undefined && cfg.kxMode) {
+            discovery.encInfo = { encMode: cfg.encMode, kxMode: cfg.kxMode };
+            // Broadcast encryption change immediately (only to sender/receiver, not attacker)
+            const port = cfg.port || 12347;
+            broadcastPresence(discovery, currentRole, port, discovery.encInfo);
+          }
+          
           // Update the role instance with new security config
           if (roleInstance && roleInstance.updateSecurityConfig) {
             await roleInstance.updateSecurityConfig(cfg);
@@ -325,7 +341,15 @@ wss.on("connection", (ws) => {
 });
 
 server.listen(PORT, () => {
-  log("app", `Server listening on http://localhost:${PORT} (local IP: ${getLocalIp()})`);
+  const localIp = getLocalIp();
+  log("app", `Server listening on http://localhost:${PORT} (local IP: ${localIp})`);
+  
+  // Initialize Python crypto utilities
+  try {
+    initPythonCrypto();
+  } catch (err) {
+    log("app", `NOTE: Python crypto initialization skipped: ${err.message}`);
+  }
 });
 
 

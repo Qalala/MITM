@@ -54,10 +54,13 @@ function startDiscovery(currentRole, currentPort) {
             // Always use DISCOVERY_PORT as destination - sender should be listening on this port
             // rinfo.port might be DISCOVERY_PORT or might be the ephemeral port the probe came from
             // But we always respond to DISCOVERY_PORT since that's where the sender's socket is bound
-            const response = Buffer.from(
-              JSON.stringify({ magic: MAGIC, role: state.currentRole, ip: getLocalIp(), port: state.currentPort }),
-              "utf8"
-            );
+            const responseObj = { magic: MAGIC, role: state.currentRole, ip: getLocalIp(), port: state.currentPort };
+            // Include encryption info if available (for sender/receiver only)
+            if (state.encInfo && state.currentRole !== "attacker") {
+              responseObj.encMode = state.encInfo.encMode;
+              responseObj.kxMode = state.encInfo.kxMode;
+            }
+            const response = Buffer.from(JSON.stringify(responseObj), "utf8");
             // Try both DISCOVERY_PORT and rinfo.port to ensure response reaches sender
             socket.send(response, 0, response.length, DISCOVERY_PORT, rinfo.address, (err) => {
               if (err) {
@@ -120,7 +123,9 @@ function startDiscovery(currentRole, currentPort) {
     get currentRole() { return state.currentRole; },
     set currentRole(val) { state.currentRole = val; },
     get currentPort() { return state.currentPort; },
-    set currentPort(val) { state.currentPort = val; }
+    set currentPort(val) { state.currentPort = val; },
+    get encInfo() { return state.encInfo; },
+    set encInfo(val) { state.encInfo = val; }
   };
   return returnState;
 }
@@ -134,12 +139,18 @@ function stopDiscovery(state) {
   }
 }
 
-function broadcastPresence(state, role, mainPort) {
+function broadcastPresence(state, role, mainPort, encInfo = null) {
   if (!state || !state.socket) return;
-  const msg = Buffer.from(
-    JSON.stringify({ magic: MAGIC, role, ip: getLocalIp(), port: mainPort }),
-    "utf8"
-  );
+  const msgObj = { magic: MAGIC, role, ip: getLocalIp(), port: mainPort };
+  
+  // Include encryption info if provided (for sender/receiver only, not attacker)
+  if (encInfo && role !== "attacker") {
+    msgObj.encMode = encInfo.encMode;
+    msgObj.kxMode = encInfo.kxMode;
+    msgObj.encryptionChanged = true;
+  }
+  
+  const msg = Buffer.from(JSON.stringify(msgObj), "utf8");
   state.socket.send(msg, 0, msg.length, DISCOVERY_PORT, "255.255.255.255", (err) => {
     if (err) {
       // Silently ignore broadcast errors (may fail on some networks)

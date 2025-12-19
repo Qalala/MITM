@@ -92,8 +92,19 @@ async function initInfo() {
       targetIpInput.addEventListener("input", () => {
         const port = parseInt(targetPortInput?.value || info.defaultPort, 10);
         localIpEl.textContent = info.localIp + ":" + port + " (TCP)";
+        updateTargetDisplay();
       });
     }
+    
+    // Update target display when port changes
+    if (targetPortInput) {
+      targetPortInput.addEventListener("input", () => {
+        updateTargetDisplay();
+      });
+    }
+    
+    // Initial target display update
+    updateTargetDisplay();
     
     document.getElementById("target-ip").value = "";
     document.getElementById("enc-mode").value = "0";
@@ -495,6 +506,7 @@ function displayDiscoveryResults(results) {
           }
           // Update status
           statusEl.textContent = `Attacker will intercept: ${role} at ${ip}:${port}`;
+          updateTargetDisplay();
         } else {
           logLine(`Selected discovered device: ${role} at ${ip}:${port}`, "success");
         }
@@ -630,35 +642,8 @@ function setupSecurityListeners() {
   const senderPsk = document.getElementById("psk-input");
   const senderDemo = document.getElementById("demo-mode");
   
-  if (senderEncMode) {
-    senderEncMode.addEventListener("change", () => {
-      if (currentRole === "sender") {
-        updateSecurityConfig();
-        logLine(`Encryption mode changed to: ${senderEncMode.value}`, "role-selected");
-      }
-    });
-  }
-  
-  if (senderKxMode) {
-    senderKxMode.addEventListener("change", () => {
-      if (currentRole === "sender") {
-        updateSecurityConfig();
-        logLine(`Key exchange mode changed to: ${senderKxMode.value}`, "role-selected");
-      }
-    });
-  }
-  
-  if (senderPsk) {
-    senderPsk.addEventListener("input", () => {
-      if (currentRole === "sender") {
-        // Debounce PSK updates to avoid too many messages
-        clearTimeout(senderPsk.updateTimeout);
-        senderPsk.updateTimeout = setTimeout(() => {
-          updateSecurityConfig();
-        }, 500);
-      }
-    });
-  }
+  // Initial PSK indicator update
+  updatePskRequiredIndicator();
   
   if (senderDemo) {
     senderDemo.addEventListener("change", () => {
@@ -676,6 +661,7 @@ function setupSecurityListeners() {
   
   if (receiverDecryptMode) {
     receiverDecryptMode.addEventListener("change", () => {
+      updatePskRequiredIndicator();
       if (currentRole === "receiver") {
         updateSecurityConfig();
         logLine(`Decryption mode changed to: ${receiverDecryptMode.value}`, "role-selected");
@@ -685,6 +671,7 @@ function setupSecurityListeners() {
   
   if (receiverKxMode) {
     receiverKxMode.addEventListener("change", () => {
+      updatePskRequiredIndicator();
       if (currentRole === "receiver") {
         updateSecurityConfig();
         logLine(`Key exchange mode changed to: ${receiverKxMode.value}`, "role-selected");
@@ -694,12 +681,67 @@ function setupSecurityListeners() {
   
   if (receiverPsk) {
     receiverPsk.addEventListener("input", () => {
+      updatePskRequiredIndicator(); // Update indicator when PSK changes
       if (currentRole === "receiver") {
         // Debounce PSK updates to avoid too many messages
         clearTimeout(receiverPsk.updateTimeout);
         receiverPsk.updateTimeout = setTimeout(() => {
           updateSecurityConfig();
         }, 500);
+      }
+    });
+  }
+  
+  // Add listeners for encryption mode and KX mode changes to update PSK indicator
+  if (senderEncMode) {
+    senderEncMode.addEventListener("change", () => {
+      updatePskRequiredIndicator();
+      if (currentRole === "sender") {
+        updateSecurityConfig();
+        logLine(`Encryption mode changed to: ${senderEncMode.value}`, "role-selected");
+      }
+    });
+  }
+  
+  if (senderKxMode) {
+    senderKxMode.addEventListener("change", () => {
+      updatePskRequiredIndicator();
+      if (currentRole === "sender") {
+        updateSecurityConfig();
+        logLine(`Key exchange mode changed to: ${senderKxMode.value}`, "role-selected");
+      }
+    });
+  }
+  
+  if (senderPsk) {
+    senderPsk.addEventListener("input", () => {
+      updatePskRequiredIndicator(); // Update indicator when PSK changes
+      if (currentRole === "sender") {
+        // Debounce PSK updates to avoid too many messages
+        clearTimeout(senderPsk.updateTimeout);
+        senderPsk.updateTimeout = setTimeout(() => {
+          updateSecurityConfig();
+        }, 500);
+      }
+    });
+  }
+  
+  if (receiverDecryptMode) {
+    receiverDecryptMode.addEventListener("change", () => {
+      updatePskRequiredIndicator();
+      if (currentRole === "receiver") {
+        updateSecurityConfig();
+        logLine(`Decryption mode changed to: ${receiverDecryptMode.value}`, "role-selected");
+      }
+    });
+  }
+  
+  if (receiverKxMode) {
+    receiverKxMode.addEventListener("change", () => {
+      updatePskRequiredIndicator();
+      if (currentRole === "receiver") {
+        updateSecurityConfig();
+        logLine(`Key exchange mode changed to: ${receiverKxMode.value}`, "role-selected");
       }
     });
   }
@@ -742,6 +784,99 @@ function addAttackLog(message, level = "info") {
   entry.textContent = `[${timestamp}] ${message}`;
   attackLogContent.appendChild(entry);
   attackLogContent.scrollTop = attackLogContent.scrollHeight;
+}
+
+// Function to update target IP/port display
+function updateTargetDisplay() {
+  const targetInfo = document.getElementById("target-info");
+  const targetDisplay = document.getElementById("target-display");
+  if (!targetInfo || !targetDisplay) return;
+  
+  const targetIp = document.getElementById("target-ip")?.value.trim() || "";
+  const targetPort = document.getElementById("target-port")?.value.trim() || "";
+  
+  // For attacker, also check attacker-specific IPs
+  let displayText = "";
+  if (currentRole === "attacker") {
+    const senderIp = document.getElementById("attacker-sender-ip")?.value.trim() || "";
+    const receiverIp = document.getElementById("attacker-receiver-ip")?.value.trim() || "";
+    
+    if (senderIp && receiverIp) {
+      displayText = `Sender: ${senderIp}:${targetPort} → Receiver: ${receiverIp}:${targetPort}`;
+    } else if (receiverIp) {
+      displayText = `Receiver: ${receiverIp}:${targetPort}`;
+    } else if (senderIp) {
+      displayText = `Sender: ${senderIp}:${targetPort}`;
+    } else if (targetIp) {
+      displayText = `${targetIp}:${targetPort}`;
+    } else {
+      displayText = "Not set";
+    }
+  } else {
+    if (targetIp && targetPort) {
+      displayText = `${targetIp}:${targetPort}`;
+    } else {
+      displayText = "Not set";
+    }
+  }
+  
+  targetDisplay.textContent = displayText;
+  targetInfo.style.display = displayText !== "Not set" ? "block" : "none";
+}
+
+// Function to update PSK required indicator
+function updatePskRequiredIndicator() {
+  const senderEncMode = document.getElementById("enc-mode");
+  const senderKxMode = document.getElementById("kx-mode");
+  const senderPskIndicator = document.getElementById("psk-required-indicator");
+  const senderPskInput = document.getElementById("psk-input");
+  
+  const receiverEncMode = document.getElementById("receiver-decrypt-mode");
+  const receiverKxMode = document.getElementById("receiver-kx-mode");
+  const receiverPskIndicator = document.getElementById("receiver-psk-required-indicator");
+  const receiverPskInput = document.getElementById("receiver-psk-input");
+  
+  // Update sender PSK indicator
+  if (senderEncMode && senderKxMode && senderPskIndicator) {
+    const encMode = parseInt(senderEncMode.value, 10);
+    const kxMode = senderKxMode.value;
+    const isRequired = kxMode === "psk" && encMode !== 0; // Required for PSK + encrypted modes
+    
+    if (isRequired) {
+      senderPskIndicator.style.display = "inline";
+      if (senderPskInput) {
+        senderPskInput.required = true;
+        senderPskInput.style.borderColor = senderPskInput.value ? "" : "#ff6b6b";
+      }
+    } else {
+      senderPskIndicator.style.display = "none";
+      if (senderPskInput) {
+        senderPskInput.required = false;
+        senderPskInput.style.borderColor = "";
+      }
+    }
+  }
+  
+  // Update receiver PSK indicator
+  if (receiverEncMode && receiverKxMode && receiverPskIndicator) {
+    const encMode = parseInt(receiverEncMode.value, 10);
+    const kxMode = receiverKxMode.value;
+    const isRequired = kxMode === "psk" && encMode !== 0; // Required for PSK + encrypted modes
+    
+    if (isRequired) {
+      receiverPskIndicator.style.display = "inline";
+      if (receiverPskInput) {
+        receiverPskInput.required = true;
+        receiverPskInput.style.borderColor = receiverPskInput.value ? "" : "#ff6b6b";
+      }
+    } else {
+      receiverPskIndicator.style.display = "none";
+      if (receiverPskInput) {
+        receiverPskInput.required = false;
+        receiverPskInput.style.borderColor = "";
+      }
+    }
+  }
 }
 
 // Function to setup attack mode options visibility
@@ -821,6 +956,24 @@ function updateAttackConfig() {
   }));
 }
 
+// Function to setup attacker IP input listeners
+function setupAttackerIpListeners() {
+  const senderIpInput = document.getElementById("attacker-sender-ip");
+  const receiverIpInput = document.getElementById("attacker-receiver-ip");
+  
+  if (senderIpInput) {
+    senderIpInput.addEventListener("input", () => {
+      updateTargetDisplay();
+    });
+  }
+  
+  if (receiverIpInput) {
+    receiverIpInput.addEventListener("input", () => {
+      updateTargetDisplay();
+    });
+  }
+}
+
 // Function to handle start attack button
 function setupStartAttackButton() {
   const startAttackBtn = document.getElementById("start-attack-btn");
@@ -872,11 +1025,13 @@ if (document.readyState === "loading") {
     setupSecurityListeners();
     setupAttackModeOptions();
     setupStartAttackButton();
+    setupAttackerIpListeners();
   });
 } else {
   setupSecurityListeners();
   setupAttackModeOptions();
   setupStartAttackButton();
+  setupAttackerIpListeners();
 }
 
 

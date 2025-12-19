@@ -11,7 +11,7 @@ const { ENC_MODES } = require("../../../core/protocol/constants");
 function createAttacker(config, ws) {
   const listenIp = "0.0.0.0";
   const listenPort = config.port || 12347;
-  let targetIp = config.targetIp || "127.0.0.1";
+  let targetIp = config.targetIp || null; // No default, must be set
   let targetPort = config.port || 12347;
   let mode = config.attackMode || "passive";
   let dropRate = Number(config.dropRate || 0);
@@ -114,7 +114,7 @@ function createAttacker(config, ws) {
       actualTargetIp = targetIp;
     }
     
-    if (!actualTargetIp || actualTargetIp === "127.0.0.1") {
+    if (!actualTargetIp) {
       logUi(ws, "attacker", "ERROR: Target IP not configured. Please set Receiver IP in attacker controls.");
       sendUi(ws, { type: "error", error: "Target IP not configured. Please set Receiver IP in Attacker Controls." });
       try {
@@ -317,6 +317,19 @@ function createAttacker(config, ws) {
     if (newConfig.modifyText !== undefined) {
       modifyText = (newConfig.modifyText && newConfig.modifyText.trim()) || "[MITM modified]";
     }
+    // Update target IPs if provided
+    if (newConfig.senderIp !== undefined) {
+      senderIp = newConfig.senderIp || null;
+    }
+    if (newConfig.receiverIp !== undefined) {
+      receiverIp = newConfig.receiverIp || null;
+      if (receiverIp) {
+        targetIp = receiverIp; // Update target IP when receiver IP is set
+      }
+    }
+    if (newConfig.targetIp !== undefined) {
+      targetIp = newConfig.targetIp || null;
+    }
   }
 
   async function startAttack(attackConfig) {
@@ -380,11 +393,15 @@ function createAttacker(config, ws) {
     async updateAttackConfig(newConfig) {
       updateAttackConfig(newConfig);
     },
+    async updateSecurityConfig(newConfig) {
+      // Attacker doesn't use security config, but implement for consistency
+      updateAttackConfig(newConfig);
+    },
     checkHandshake() {
       const isComplete = clientConn && serverConn;
       return {
         complete: isComplete,
-        status: isComplete ? "MITM relay active - connections established" : (clientConn || serverConn ? "Partial connection..." : attackActive ? "Attack active, waiting for connections..." : "Attack not started")
+        status: isComplete ? "MITM relay active - connections established" : (clientConn || serverConn ? "Partial connection..." : attackActive ? "Attack active, waiting for connections..." : "Waiting for connections...")
       };
     }
   };
