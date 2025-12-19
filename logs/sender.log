@@ -106,3 +106,4 @@
 [2025-12-19T14:42:26.096Z] [sender] SENT: test
 [2025-12-19T14:44:56.351Z] [sender] SENT: ji
 [2025-12-19T14:45:15.970Z] [sender] SENT: oh
+[2025-12-19T14:45:59.237Z] [sender] Background receive error: read ECONNRESET

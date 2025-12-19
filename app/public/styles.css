@@ -164,6 +164,37 @@ section[id$="-section"] {
   min-height: 200px;
 }
 
+.attack-btn {
+  background: #ff9800;
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 500;
+  width: 100%;
+  text-align: left;
+  transition: background 0.2s;
+  margin-top: 4px;
+}
+
+.attack-btn:hover {
+  background: #f57c00;
+}
+
+.attack-btn:active {
+  background: #e68900;
+}
+
+#attack-stop-btn {
+  background: #d32f2f !important;
+}
+
+#attack-stop-btn:hover {
+  background: #b71c1c !important;
+}
+
 @media (max-width: 600px) {
   .container {
     padding: 8px;

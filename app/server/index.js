@@ -236,19 +236,38 @@ wss.on("connection", (ws) => {
           }
           break;
         }
-        case "updateAttackConfig": {
+        case "triggerAttack": {
           if (currentRole !== "attacker") {
-            ws.send(JSON.stringify({ type: "error", error: "Only attacker role can update attack config" }));
+            ws.send(JSON.stringify({ type: "error", error: "Only attacker role can trigger attacks" }));
             break;
           }
-          if (!roleInstance || !roleInstance.updateConfig) {
+          if (!roleInstance || !roleInstance.triggerAttack) {
             ws.send(JSON.stringify({ type: "error", error: "Attacker not initialized" }));
             break;
           }
           const cfg = msg.config || {};
-          roleInstance.updateConfig(cfg);
-          ws.send(JSON.stringify({ type: "status", status: "Attack settings updated" }));
-          log("attacker", `Attack config updated: mode=${cfg.attackMode}, dropRate=${cfg.dropRate}%, delay=${cfg.delayMs}ms`);
+          const attackType = cfg.attackType;
+          if (!attackType) {
+            ws.send(JSON.stringify({ type: "error", error: "Attack type not specified" }));
+            break;
+          }
+          roleInstance.triggerAttack(attackType, cfg);
+          ws.send(JSON.stringify({ type: "status", status: `Attack triggered: ${attackType}` }));
+          log("attacker", `Attack triggered: ${attackType} on ${cfg.targetRole || "target"} at ${cfg.targetIp}:${cfg.targetPort}`);
+          break;
+        }
+        case "stopAttack": {
+          if (currentRole !== "attacker") {
+            ws.send(JSON.stringify({ type: "error", error: "Only attacker role can stop attacks" }));
+            break;
+          }
+          if (!roleInstance || !roleInstance.stopAttack) {
+            ws.send(JSON.stringify({ type: "error", error: "Attacker not initialized" }));
+            break;
+          }
+          roleInstance.stopAttack();
+          ws.send(JSON.stringify({ type: "status", status: "All attacks stopped" }));
+          log("attacker", "All attacks stopped");
           break;
         }
         default:
