@@ -21,11 +21,12 @@ const { encryptCbcHmac, decryptCbcHmac, generateIv } = require("../../../core/cr
 function createReceiver(config, ws) {
   const bindIp = "0.0.0.0";
   const port = config.port || 12347;
-  const demo = !!config.demo;
   // Receiver uses a single decryption mode (must match sender's encryption mode)
-  const encMode = Number(config.encMode || 0);
-  const kxMode = config.kxMode || KX_MODES.PSK;
-  const psk = config.psk ? Buffer.from(config.psk) : null;
+  // Use let instead of const to allow updates
+  let demo = !!config.demo;
+  let encMode = Number(config.encMode || 0);
+  let kxMode = config.kxMode || KX_MODES.PSK;
+  let psk = config.psk ? Buffer.from(config.psk) : null;
   
   // Log the configured mode for debugging
   logUi(ws, "receiver", `Receiver configured with decryption mode: ${encMode}, KX mode: ${kxMode}`);
@@ -342,34 +343,74 @@ function createReceiver(config, ws) {
     // Note: For receiver, changing security settings while listening may affect new connections
     const oldEncMode = encMode;
     const oldKxMode = kxMode;
+    const oldPsk = psk;
+    let configChanged = false;
     
     if (newConfig.encMode !== undefined && newConfig.encMode !== null) {
       const newEncMode = Number(newConfig.encMode);
-      if (newEncMode >= 0 && newEncMode <= 3) {
+      if (newEncMode >= 0 && newEncMode <= 3 && newEncMode !== encMode) {
         encMode = newEncMode;
-        logUi(ws, "receiver", `Security config updated: decryption mode changed from ${oldEncMode} to ${encMode}`);
+        configChanged = true;
+        logUi(ws, "receiver", `⚠ DECRYPTION MODE CHANGED: ${oldEncMode} → ${encMode}`);
+        sendUi(ws, { 
+          type: "log", 
+          message: `⚠ WARNING: Decryption mode changed from ${oldEncMode} to ${encMode}. Current connection will be closed. New connections must use encryption mode ${encMode}.` 
+        });
       }
     }
-    if (newConfig.kxMode) {
+    if (newConfig.kxMode && newConfig.kxMode !== kxMode) {
       kxMode = newConfig.kxMode;
-      logUi(ws, "receiver", `Security config updated: key exchange mode changed from ${oldKxMode} to ${kxMode}`);
+      configChanged = true;
+      logUi(ws, "receiver", `⚠ KEY EXCHANGE MODE CHANGED: ${oldKxMode} → ${kxMode}`);
+      sendUi(ws, { 
+        type: "log", 
+        message: `⚠ WARNING: Key exchange mode changed from ${oldKxMode} to ${kxMode}. Current connection will be closed.` 
+      });
     }
     if (newConfig.psk !== undefined) {
-      psk = newConfig.psk ? Buffer.from(newConfig.psk) : null;
-      logUi(ws, "receiver", `Security config updated: PSK ${psk ? "updated" : "cleared"}`);
+      const newPsk = newConfig.psk ? Buffer.from(newConfig.psk) : null;
+      const pskChanged = (newPsk && !oldPsk) || (!newPsk && oldPsk) || (newPsk && oldPsk && !newPsk.equals(oldPsk));
+      if (pskChanged) {
+        psk = newPsk;
+        configChanged = true;
+        logUi(ws, "receiver", `Security config updated: PSK ${psk ? "updated" : "cleared"}`);
+        sendUi(ws, { 
+          type: "log", 
+          message: `⚠ WARNING: PSK changed. Current connection will be closed. New connections must use the new PSK.` 
+        });
+      }
     }
     if (newConfig.demo !== undefined) {
-      demo = !!newConfig.demo;
-      logUi(ws, "receiver", `Security config updated: demo mode ${demo ? "enabled" : "disabled"}`);
+      const newDemo = !!newConfig.demo;
+      if (newDemo !== demo) {
+        demo = newDemo;
+        logUi(ws, "receiver", `Security config updated: demo mode ${demo ? "enabled" : "disabled"}`);
+      }
     }
     
-    // If there's an active connection, warn that new settings will apply to new connections
-    if (conn && handshakeDone) {
-      logUi(ws, "receiver", "⚠ Security settings updated. Current connection will continue with old settings. New connections will use new settings.");
-      sendUi(ws, { type: "log", message: "⚠ Security settings updated. Current connection uses old settings. New connections will use new settings." });
-    } else if (server) {
+    // If security config changed and there's an active connection, close it to force reconnection
+    if (configChanged && conn && handshakeDone) {
+      logUi(ws, "receiver", "⚠ Closing current connection due to security mode change. Waiting for new connection with updated settings.");
+      sendUi(ws, { 
+        type: "log", 
+        message: "⚠ Current connection closed due to security mode change. Sender must reconnect with matching encryption mode." 
+      });
+      try {
+        conn.end();
+        conn.destroy();
+      } catch {}
+      conn = null;
+      handshakeDone = false;
+      sessionKey = null;
+      sharedSecret = null;
+      seqIn = 0;
+      negotiatedEncMode = null;
+    } else if (configChanged && server) {
       logUi(ws, "receiver", "⚠ Security settings updated. New connections will use the updated settings.");
-      sendUi(ws, { type: "log", message: "⚠ Security settings updated. New connections will use the updated settings." });
+      sendUi(ws, { 
+        type: "log", 
+        message: "⚠ Security settings updated. New connections will use the updated settings." 
+      });
     }
   }
 

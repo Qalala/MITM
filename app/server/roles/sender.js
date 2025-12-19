@@ -344,34 +344,81 @@ function createSender(config, ws) {
   }
 
   function updateSecurityConfig(newConfig) {
-    // Update security-related config without requiring reconnect
+    // Update security-related config
+    const oldEncMode = encMode;
+    const oldKxMode = kxMode;
+    const oldPsk = psk;
+    let configChanged = false;
+    
     if (newConfig.encMode !== undefined && newConfig.encMode !== null) {
       const newEncMode = Number(newConfig.encMode);
-      if (newEncMode >= 0 && newEncMode <= 3) {
+      if (newEncMode >= 0 && newEncMode <= 3 && newEncMode !== encMode) {
         encMode = newEncMode;
-        logUi(ws, "sender", `Security config updated: encryption mode changed to ${encMode}`);
+        configChanged = true;
+        logUi(ws, "sender", `⚠ ENCRYPTION MODE CHANGED: ${oldEncMode} → ${encMode}`);
+        sendUi(ws, { 
+          type: "log", 
+          message: `⚠ WARNING: Encryption mode changed from ${oldEncMode} to ${encMode}. Current connection will be closed. Please reconnect with matching receiver mode.` 
+        });
       }
     }
-    if (newConfig.kxMode) {
+    if (newConfig.kxMode && newConfig.kxMode !== kxMode) {
       kxMode = newConfig.kxMode;
-      logUi(ws, "sender", `Security config updated: key exchange mode changed to ${kxMode}`);
+      configChanged = true;
+      logUi(ws, "sender", `⚠ KEY EXCHANGE MODE CHANGED: ${oldKxMode} → ${kxMode}`);
+      sendUi(ws, { 
+        type: "log", 
+        message: `⚠ WARNING: Key exchange mode changed from ${oldKxMode} to ${kxMode}. Current connection will be closed.` 
+      });
     }
     if (newConfig.psk !== undefined) {
-      psk = newConfig.psk ? Buffer.from(newConfig.psk) : null;
-      logUi(ws, "sender", `Security config updated: PSK ${psk ? "updated" : "cleared"}`);
+      const newPsk = newConfig.psk ? Buffer.from(newConfig.psk) : null;
+      const pskChanged = (newPsk && !oldPsk) || (!newPsk && oldPsk) || (newPsk && oldPsk && !newPsk.equals(oldPsk));
+      if (pskChanged) {
+        psk = newPsk;
+        configChanged = true;
+        logUi(ws, "sender", `Security config updated: PSK ${psk ? "updated" : "cleared"}`);
+        sendUi(ws, { 
+          type: "log", 
+          message: `⚠ WARNING: PSK changed. Current connection will be closed. Please reconnect with matching receiver PSK.` 
+        });
+      }
     }
     if (newConfig.demo !== undefined) {
-      demo = !!newConfig.demo;
-      logUi(ws, "sender", `Security config updated: demo mode ${demo ? "enabled" : "disabled"}`);
+      const newDemo = !!newConfig.demo;
+      if (newDemo !== demo) {
+        demo = newDemo;
+        logUi(ws, "sender", `Security config updated: demo mode ${demo ? "enabled" : "disabled"}`);
+      }
     }
     
     // Update stored config
     storedConfig = { ...storedConfig, encMode, kxMode, psk, demo };
     
-    // If there's an active connection, warn that new settings will apply on next connection
-    if (socket && handshakeDone) {
-      logUi(ws, "sender", "⚠ Security settings updated. Current connection will continue with old settings. New settings will apply on next connection.");
-      sendUi(ws, { type: "log", message: "⚠ Security settings updated. Current connection uses old settings. Reconnect to apply new settings." });
+    // If security config changed and there's an active connection, close it to force reconnection
+    if (configChanged && socket && handshakeDone) {
+      logUi(ws, "sender", "⚠ Closing current connection due to security mode change. Please reconnect with updated settings.");
+      sendUi(ws, { 
+        type: "log", 
+        message: "⚠ Current connection closed due to security mode change. Please click 'Connect' to reconnect with new settings." 
+      });
+      try {
+        socket.end();
+        socket.destroy();
+      } catch {}
+      socket = null;
+      handshakeDone = false;
+      sessionKey = null;
+      sharedSecret = null;
+      seqOut = 0;
+      negotiatedEncMode = null;
+      sendUi(ws, { type: "handshakeStatus", complete: false, status: "Disconnected - security mode changed. Please reconnect." });
+    } else if (configChanged) {
+      logUi(ws, "sender", "⚠ Security settings updated. New connections will use the updated settings.");
+      sendUi(ws, { 
+        type: "log", 
+        message: "⚠ Security settings updated. New connections will use the updated settings." 
+      });
     }
   }
 

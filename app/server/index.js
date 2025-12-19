@@ -87,8 +87,36 @@ wss.on("connection", (ws) => {
           
           if (currentRole === "sender") {
             roleInstance = createSender(cfg, ws);
+            
+            // Register callback for encryption change notifications from receiver
+            if (discovery && discovery.onEncryptionChange) {
+              discovery.onEncryptionChange((encChange) => {
+                // When receiver changes encryption mode, notify sender
+                if (encChange.fromRole === "receiver") {
+                  log("sender", `Received encryption change broadcast: mode=${encChange.encMode}, kx=${encChange.kxMode} from receiver at ${encChange.fromIp}`);
+                  ws.send(JSON.stringify({
+                    type: "log",
+                    message: `⚠ Receiver at ${encChange.fromIp} changed decryption mode to ${encChange.encMode} (KX: ${encChange.kxMode}). Update your encryption mode to match if you want to connect.`
+                  }));
+                }
+              });
+            }
           } else if (currentRole === "receiver") {
             roleInstance = createReceiver(cfg, ws);
+            
+            // Register callback for encryption change notifications from sender
+            if (discovery && discovery.onEncryptionChange) {
+              discovery.onEncryptionChange((encChange) => {
+                // When sender changes encryption mode, notify receiver
+                if (encChange.fromRole === "sender") {
+                  log("receiver", `Received encryption change broadcast: mode=${encChange.encMode}, kx=${encChange.kxMode} from sender at ${encChange.fromIp}`);
+                  ws.send(JSON.stringify({
+                    type: "log",
+                    message: `⚠ Sender at ${encChange.fromIp} changed encryption mode to ${encChange.encMode} (KX: ${encChange.kxMode}). Update your decryption mode to match if you want to accept connections.`
+                  }));
+                }
+              });
+            }
           } else if (currentRole === "attacker") {
             roleInstance = createAttacker(cfg, ws);
           } else {
@@ -246,6 +274,14 @@ wss.on("connection", (ws) => {
           if (roleInstance && roleInstance.updateSecurityConfig) {
             await roleInstance.updateSecurityConfig(cfg);
             ws.send(JSON.stringify({ type: "status", status: `Security settings updated for ${currentRole}` }));
+            
+            // For receiver, also send a warning message to UI
+            if (currentRole === "receiver") {
+              ws.send(JSON.stringify({ 
+                type: "log", 
+                message: "⚠ Decryption mode changed. Sender must reconnect with matching encryption mode." 
+              }));
+            }
           } else if (roleInstance) {
             // If updateSecurityConfig is not available, recreate the instance with new config
             // This is a fallback for roles that don't support dynamic updates

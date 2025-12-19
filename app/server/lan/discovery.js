@@ -103,6 +103,25 @@ function startDiscovery(currentRole, currentPort) {
             const key = `${obj.role}@${peerIp}:${devicePort}`;
             peers.add(key);
           }
+          
+          // Handle encryption change broadcasts (sender/receiver only, not attacker)
+          // If we receive an encryption change broadcast, notify the role instance
+          if (obj.encryptionChanged && obj.encMode !== undefined && obj.kxMode && 
+              state.currentRole && state.currentRole !== "attacker" && state.currentRole !== obj.role) {
+            // This is an encryption change from the other party (sender->receiver or receiver->sender)
+            // Store this info so the role instance can be notified
+            if (!state.encChangeCallbacks) {
+              state.encChangeCallbacks = [];
+            }
+            // Trigger callbacks if any are registered
+            state.encChangeCallbacks.forEach(cb => {
+              try {
+                cb({ encMode: obj.encMode, kxMode: obj.kxMode, fromRole: obj.role, fromIp: peerIp });
+              } catch (e) {
+                // Ignore callback errors
+              }
+            });
+          }
         }
       }
     } catch (e) {
@@ -125,7 +144,23 @@ function startDiscovery(currentRole, currentPort) {
     get currentPort() { return state.currentPort; },
     set currentPort(val) { state.currentPort = val; },
     get encInfo() { return state.encInfo; },
-    set encInfo(val) { state.encInfo = val; }
+    set encInfo(val) { state.encInfo = val; },
+    // Register callback for encryption change notifications
+    onEncryptionChange(callback) {
+      if (!state.encChangeCallbacks) {
+        state.encChangeCallbacks = [];
+      }
+      state.encChangeCallbacks.push(callback);
+    },
+    // Remove callback
+    offEncryptionChange(callback) {
+      if (state.encChangeCallbacks) {
+        const index = state.encChangeCallbacks.indexOf(callback);
+        if (index > -1) {
+          state.encChangeCallbacks.splice(index, 1);
+        }
+      }
+    }
   };
   return returnState;
 }
