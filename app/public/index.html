@@ -31,12 +31,14 @@
             <option value="udp-broadcast">UDP broadcast (1:M, optional)</option>
           </select>
         </label>
-        <label>Target IP: <input id="target-ip" placeholder="e.g. 192.168.1.10" /></label>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <label style="flex: 1;">Target IP: <input id="target-ip" placeholder="e.g. 192.168.1.10" style="width: 100%;" /></label>
+          <button id="connect-btn" style="display: inline-block;">Connect</button>
+        </div>
         <label>Port: <input id="target-port" value="12347" /></label>
         <div style="display: flex; gap: 8px; margin-top: 8px;">
           <button id="discover-btn">Auto discover</button>
           <button id="refresh-btn">Refresh</button>
-          <button id="connect-btn" style="display: none;"></button>
         </div>
         <div id="discover-results" class="log" style="min-height:60px;max-height:120px;"></div>
       </section>

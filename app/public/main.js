@@ -42,8 +42,8 @@ function showRoleSections(role) {
     document.getElementById("chat-section").style.display = "block";
     // Show chat input for sender
     document.getElementById("chat-input-row").style.display = "flex";
-    // Connect button removed - sender auto-connects
-    connectBtn.style.display = "none";
+    // Show Connect button for sender
+    connectBtn.style.display = "inline-block";
   } else if (role === "receiver") {
     document.getElementById("network-section").style.display = "block";
     document.getElementById("receiver-security-section").style.display = "block";
@@ -85,6 +85,16 @@ async function initInfo() {
         localIpEl.textContent = info.localIp + ":" + port + " (TCP)";
       });
     }
+    
+    // Update local port display when target IP changes (for all roles)
+    const targetIpInput = document.getElementById("target-ip");
+    if (targetIpInput) {
+      targetIpInput.addEventListener("input", () => {
+        const port = parseInt(targetPortInput?.value || info.defaultPort, 10);
+        localIpEl.textContent = info.localIp + ":" + port + " (TCP)";
+      });
+    }
+    
     document.getElementById("target-ip").value = "";
     document.getElementById("enc-mode").value = "0";
     document.getElementById("kx-mode").value = "psk";
@@ -249,10 +259,52 @@ setRoleBtn.onclick = async () => {
   // Sender will auto-connect on the server side if target IP is provided or discovered
 };
 
-// Connect button removed - sender auto-connects when role is set
-// This function is kept for backward compatibility but should not be called
 connectBtn.onclick = () => {
-  logLine("Auto-connect is enabled. Set role to sender and enter target IP to connect automatically.", "error");
+  ensureWs();
+  
+  // Check role from dropdown, not just currentRole variable
+  const role = roleSelect.value;
+  if (role !== "sender") {
+    logLine("Only sender role can connect. Please select 'Sender' role first.", "error");
+    return;
+  }
+  
+  // Update currentRole if it's not set
+  if (!currentRole) {
+    currentRole = role;
+  }
+  
+  const targetIp = document.getElementById("target-ip").value.trim();
+  if (!targetIp) {
+    logLine("Please enter a target IP address", "error");
+    return;
+  }
+  
+  const port = parseInt(document.getElementById("target-port").value, 10) || 12347;
+  const transport = document.getElementById("transport").value;
+  const encMode = parseInt(document.getElementById("enc-mode").value, 10);
+  const kxMode = document.getElementById("kx-mode").value;
+  const psk = document.getElementById("psk-input").value;
+  const demo = document.getElementById("demo-mode").checked;
+  
+  handshakeComplete = false;
+  logLine(`Connecting to ${targetIp}:${port}...`, "role-selected");
+  
+  ws.send(
+    JSON.stringify({
+      type: "connect",
+      role: "sender", // Explicitly send role
+      config: {
+        targetIp,
+        port,
+        transport,
+        encMode,
+        kxMode,
+        psk,
+        demo
+      }
+    })
+  );
 };
 
 refreshBtn.onclick = () => {
@@ -347,34 +399,7 @@ function displayDiscoveryResults(results) {
           // Ignore errors
         }
         logLine(`Selected discovered device: ${role} at ${ip}:${port}`, "success");
-        
-        // Auto-connect if sender role is already set
-        if (currentRole === "sender" && ws && ws.readyState === WebSocket.OPEN) {
-          const transport = document.getElementById("transport").value;
-          const encMode = parseInt(document.getElementById("enc-mode").value, 10);
-          const kxMode = document.getElementById("kx-mode").value;
-          const psk = document.getElementById("psk-input").value;
-          const demo = document.getElementById("demo-mode").checked;
-          
-          handshakeComplete = false;
-          logLine(`Auto-connecting to ${ip}:${port}...`, "role-selected");
-          
-          ws.send(
-            JSON.stringify({
-              type: "connect",
-              role: "sender",
-              config: {
-                targetIp: ip,
-                port: parseInt(port, 10),
-                transport,
-                encMode,
-                kxMode,
-                psk,
-                demo
-              }
-            })
-          );
-        }
+        logLine("Click 'Connect' button to connect to this device", "role-selected");
       };
       
       discoverResults.appendChild(div);

@@ -33,3 +33,24 @@
 [2025-12-19T12:50:30.743Z] [sender] Connected to 192.168.1.10:12347, starting handshake
 [2025-12-19T12:51:08.441Z] [sender] Failed to connect: read ECONNRESET
 [2025-12-19T12:51:08.442Z] [sender] Sender stopped and socket closed
+[2025-12-19T13:16:32.152Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T13:17:13.827Z] [sender] Failed to connect: Premature close
+[2025-12-19T13:17:13.828Z] [sender] Sender stopped and socket closed
+[2025-12-19T13:17:13.829Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T13:17:58.475Z] [sender] Failed to connect: Premature close
+[2025-12-19T13:17:58.476Z] [sender] Sender stopped and socket closed
+[2025-12-19T13:17:58.477Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T13:18:20.230Z] [sender] Failed to connect: Premature close
+[2025-12-19T13:18:20.231Z] [sender] Sender stopped and socket closed
+[2025-12-19T13:18:20.233Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T13:18:28.648Z] [sender] Failed to connect: Premature close
+[2025-12-19T13:18:28.649Z] [sender] Sender stopped and socket closed
+[2025-12-19T13:18:28.651Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T13:18:28.654Z] [sender] Failed to connect: Expected NEGOTIATE frame
+[2025-12-19T13:18:28.655Z] [sender] Sender stopped and socket closed
+[2025-12-19T13:18:35.187Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T13:18:35.193Z] [sender] Failed to connect: Expected NEGOTIATE frame
+[2025-12-19T13:18:35.194Z] [sender] Sender stopped and socket closed
+[2025-12-19T13:18:50.734Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T13:18:50.741Z] [sender] Failed to connect: Expected NEGOTIATE frame
+[2025-12-19T13:18:50.742Z] [sender] Sender stopped and socket closed

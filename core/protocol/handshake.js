@@ -91,15 +91,21 @@ function senderProcessKeyExchange(encMode, kxMode, keyExchangePayload, options) 
       "utf8"
     );
   } else if (kxMode === KX_MODES.PSK) {
-    // PSK must be provided in options.psk (Buffer)
-    // For plaintext mode, PSK is optional but if provided it should be used
-    if (options && options.psk && Buffer.isBuffer(options.psk)) {
-      stateUpdate.sessionKey = options.psk;
-    } else if (encMode !== 0) {
+    // PSK handling: for plaintext mode, PSK is optional; for encrypted modes, PSK is required
+    // PSK can be provided as Buffer or string (will be converted to Buffer)
+    if (options && options.psk) {
+      const pskBuffer = Buffer.isBuffer(options.psk) ? options.psk : Buffer.from(options.psk);
+      if (pskBuffer.length > 0) {
+        stateUpdate.sessionKey = pskBuffer;
+      } else if (encMode !== ENC_MODES.PLAINTEXT) {
+        // For encrypted modes, PSK is required and must not be empty
+        throw new Error("PSK key required for encrypted modes");
+      }
+    } else if (encMode !== ENC_MODES.PLAINTEXT) {
       // For encrypted modes, PSK is required
-      throw new Error("PSK key required");
+      throw new Error("PSK key required for encrypted modes");
     }
-    // For plaintext mode without PSK, no sessionKey is set (which is fine)
+    // For plaintext mode without PSK, no sessionKey is set (which is fine - handshake will still complete)
   }
 
   return { responsePayload, stateUpdate };

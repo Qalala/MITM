@@ -105,37 +105,7 @@ wss.on("connection", (ws) => {
             }, 3000); // Broadcast every 3 seconds
           }
           
-          // Auto-connect sender if target IP is provided
-          if (currentRole === "sender" && cfg.targetIp) {
-            // Auto-connect immediately without delay
-            if (roleInstance && roleInstance.connect) {
-              await roleInstance.connect(cfg);
-            }
-          } else if (currentRole === "sender" && !cfg.targetIp) {
-            // If no target IP, try to discover and connect automatically
-            if (discovery && discovery.socket) {
-              // Clear previous results
-              if (discovery.peers) {
-                discovery.peers.clear();
-              }
-              // Send probe to discover devices
-              const results = await sendDiscoveryPing(discovery);
-              if (results && results.length > 0) {
-                // Parse first result and connect to it
-                const firstResult = results[0];
-                const match = firstResult.match(/^([^@]+)@(.+):(\d+)$/);
-                if (match) {
-                  const [, , ip, discoveredPort] = match;
-                  cfg.targetIp = ip;
-                  cfg.port = parseInt(discoveredPort, 10) || port;
-                  if (roleInstance && roleInstance.connect) {
-                    await roleInstance.connect(cfg);
-                  }
-                }
-              }
-            }
-          }
-          
+          // Do NOT auto-connect - user must click connect button after setting IP/port
           ws.send(JSON.stringify({ type: "status", status: `Role set to ${currentRole}` }));
           break;
         }
@@ -194,33 +164,41 @@ wss.on("connection", (ws) => {
             discovery.currentPort = port;
           }
           
-          // If role is not set or doesn't match, configure it first
+          // Ensure sender role is configured before connecting
           if (currentRole !== "sender" || !roleInstance) {
-            // Auto-configure sender role if not set
+            // Configure sender role first
             currentRole = "sender";
             if (roleInstance && roleInstance.stop) {
               await roleInstance.stop();
+            }
+            
+            // Stop previous broadcast interval
+            if (broadcastInterval) {
+              clearInterval(broadcastInterval);
+              broadcastInterval = null;
+            }
+            
+            // Start or restart discovery with sender role/port
+            if (discovery && discovery.socket) {
+              discovery.currentRole = "sender";
+              discovery.currentPort = port;
+            } else {
+              discovery = startDiscovery("sender", port);
             }
             
             roleInstance = createSender(cfg, ws);
             
             // Broadcast presence so receiver can discover sender
             broadcastPresence(discovery, "sender", port);
-            if (broadcastInterval) {
-              clearInterval(broadcastInterval);
-            }
             broadcastInterval = setInterval(() => {
               if (discovery && discovery.socket) {
                 broadcastPresence(discovery, "sender", port);
               }
             }, 3000);
-          } else {
-            // Role already set, but update config if needed
-            // The connect function in sender will handle config updates
           }
           
           if (!roleInstance || !roleInstance.connect) {
-            ws.send(JSON.stringify({ type: "error", error: "Role not ready. Please wait a moment and try again." }));
+            ws.send(JSON.stringify({ type: "error", error: "Role not ready. Please set role to 'Sender' first." }));
             break;
           }
           

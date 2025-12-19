@@ -239,11 +239,13 @@ function createSender(config, ws) {
         throw new Error("Expected KEY_EXCHANGE from receiver");
       }
 
+      // Ensure PSK is passed correctly (as Buffer or string)
+      const pskForHandshake = connectPsk ? (Buffer.isBuffer(connectPsk) ? connectPsk : Buffer.from(connectPsk)) : null;
       const { responsePayload, stateUpdate } = senderProcessKeyExchange(
         connectEncMode,
         connectKxMode,
         kx.value.payload,
-        { psk: connectPsk }
+        { psk: pskForHandshake }
       );
       if (responsePayload) {
         socket.write(encodeFrame(FRAME_TYPES.KEY_EXCHANGE, responsePayload));
@@ -270,7 +272,20 @@ function createSender(config, ws) {
     } catch (e) {
       logUi(ws, "sender", `Failed to connect: ${e.message}`);
       sendUi(ws, { type: "error", error: e.message });
-      cleanup();
+      // Don't call cleanup() on connection errors - allow retry
+      // Just reset handshake state
+      handshakeDone = false;
+      sessionKey = null;
+      sharedSecret = null;
+      seqOut = 0;
+      // Close socket if it exists, but don't destroy the entire sender instance
+      if (socket) {
+        try {
+          socket.end();
+          socket.destroy();
+        } catch {}
+        socket = null;
+      }
     }
   }
 
