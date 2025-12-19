@@ -16,13 +16,13 @@ const { encryptGcm, generateNonce } = require("../../../core/crypto/aes_gcm");
 const { encryptCbcHmac, generateIv } = require("../../../core/crypto/aes_cbc_hmac");
 
 function createSender(config, ws) {
-  const targetIp = config.targetIp || "127.0.0.1";
-  const port = config.port || 12347;
-  const transport = config.transport || "tcp";
-  const demo = !!config.demo;
-  const encMode = Number(config.encMode || 0);
-  const kxMode = config.kxMode || KX_MODES.PSK;
-  const psk = config.psk ? Buffer.from(config.psk) : null;
+  let targetIp = config.targetIp || "127.0.0.1";
+  let port = config.port || 12347;
+  let transport = config.transport || "tcp";
+  let demo = !!config.demo;
+  let encMode = Number(config.encMode || 0);
+  let kxMode = config.kxMode || KX_MODES.PSK;
+  let psk = config.psk ? Buffer.from(config.psk) : null;
 
   let socket = null;
   let running = true;

@@ -31,6 +31,12 @@ function startDiscovery(currentRole, currentPort) {
   });
   
   const peers = new Set();
+  
+  // Create state object that will be updated and referenced by the closure
+  const state = {
+    currentRole,
+    currentPort
+  };
 
   socket.on("message", (msg, rinfo) => {
     try {
@@ -39,10 +45,11 @@ function startDiscovery(currentRole, currentPort) {
         // Handle probe request - respond with our presence
         if (obj.probe) {
           // Only respond if we have a role configured
-          if (currentRole && currentPort && currentRole !== "unknown") {
+          // Reference state.currentRole and state.currentPort so updates are reflected
+          if (state.currentRole && state.currentPort && state.currentRole !== "unknown") {
             // Respond directly to the sender of the probe
             const response = Buffer.from(
-              JSON.stringify({ magic: MAGIC, role: currentRole, ip: getLocalIp(), port: currentPort }),
+              JSON.stringify({ magic: MAGIC, role: state.currentRole, ip: getLocalIp(), port: state.currentPort }),
               "utf8"
             );
             socket.send(response, 0, response.length, rinfo.port, rinfo.address, (err) => {
@@ -57,8 +64,8 @@ function startDiscovery(currentRole, currentPort) {
           // Don't add ourselves to the peer list
           const localIp = getLocalIp();
           if (rinfo.address !== localIp && rinfo.address !== "127.0.0.1") {
-            // Use the port from the message, or currentPort if not provided
-            const devicePort = obj.port || currentPort || 12347;
+            // Use the port from the message, or state.currentPort if not provided
+            const devicePort = obj.port || state.currentPort || 12347;
             const key = `${obj.role}@${rinfo.address}:${devicePort}`;
             peers.add(key);
           }
@@ -73,7 +80,18 @@ function startDiscovery(currentRole, currentPort) {
     // Silently handle errors (common on some networks)
   });
 
-  return { socket, peers, currentRole, currentPort };
+  // Return state object with socket and peers, so updates to currentRole/currentPort are reflected
+  // The closure references state.currentRole and state.currentPort, so updates to the returned object
+  // need to also update the internal state object
+  const returnState = {
+    socket,
+    peers,
+    get currentRole() { return state.currentRole; },
+    set currentRole(val) { state.currentRole = val; },
+    get currentPort() { return state.currentPort; },
+    set currentPort(val) { state.currentPort = val; }
+  };
+  return returnState;
 }
 
 function stopDiscovery(state) {
@@ -97,7 +115,8 @@ function broadcastPresence(state, role, mainPort) {
     }
   });
   
-  // Also update the state with current role/port for probe responses
+  // Update the state with current role/port for probe responses
+  // The getter/setter will update the internal state object used by the closure
   if (state) {
     state.currentRole = role;
     state.currentPort = mainPort;

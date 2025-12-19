@@ -36,7 +36,7 @@ After selecting a role and clicking "Set Role":
 - The role selection section DISAPPEARS
 - Only the relevant sections for that role will be displayed:
   - Sender: Network Setup, Security, Chat (with input)
-  - Receiver: Network Setup, Decryption Capabilities, Chat (read-only)
+  - Receiver: Network Setup, Decryption Configuration, Chat (read-only)
   - Attacker: Network Setup, Chat (read-only), Attacker Controls
 
 IMPORTANT: Role selection is NOT restored from previous sessions. You must select a role every time you open the page (simulating different devices).
@@ -106,12 +106,25 @@ Components:
 - Auto Discover Button (#discover-btn)
   * Purpose: Automatically find other devices on the LAN
   * Usage: Click to scan network for available receivers/attackers
-  * Result: Shows discovered IPs in the discovery results area below
+  * Result: Shows discovered devices in the discovery results area below
+
+- Refresh Button (#refresh-btn)
+  * Purpose: Refresh discovery results and check handshake status
+  * Usage: Click to refresh the discovery list and verify connection status
+  * For Sender: Refreshes discovery results
+  * For All Roles: Checks handshake status
+
+- Connect Button (#connect-btn)
+  * Purpose: Manually connect to target (only shown for Sender role)
+  * Usage: Click to establish connection after entering Target IP
+  * Note: Only visible for Sender role
+  * Note: Sender will auto-connect if Target IP is provided when "Set Role" is clicked
 
 - Discovery Results (#discover-results)
   * Purpose: Shows results from auto-discovery
-  * Format: List of IP addresses found
-  * Usage: Click on a discovered IP to use it as Target IP
+  * Format: List of devices with role and IP address (e.g., "RECEIVER: 192.168.1.20:12347")
+  * Usage: Click on a discovered device to use its IP as Target IP
+  * Shows: Role (SENDER/RECEIVER/ATTACKER) and IP:Port for each discovered device
 
 B. SECURITY SECTION
 -------------------
@@ -140,8 +153,8 @@ Components:
     3 - Diffie-Hellman (demo)
       * Educational demo of DH key exchange
       * Use for: Learning about key exchange vulnerabilities
-  * Usage: Select mode that Receiver supports (check Receiver's decryption capabilities)
-  * Required: Must be one of the modes the Receiver has selected in its decryption capabilities
+  * Usage: Select mode that matches Receiver's Decryption Mode exactly
+  * Required: Must match Receiver's Decryption Mode exactly (not just supported, but the exact same mode)
 
 - Key Exchange Dropdown (#kx-mode)
   * Purpose: Select key exchange method
@@ -214,10 +227,12 @@ WORKFLOW FOR SENDER:
 1. Select "sender" from role dropdown
 2. Enter Target IP (Receiver or Attacker IP)
 3. Set Port (default 12347)
-4. Select Encryption Mode (must match Receiver)
+4. Select Encryption Mode (must match Receiver's Decryption Mode exactly)
 5. Select Key Exchange (must match Receiver)
 6. If using PSK, enter Pre-shared Key (must match Receiver)
 7. Click "Set Role" button
+   - If Target IP is provided, Sender will auto-connect
+   - Otherwise, click "Connect" button manually
 8. Wait for status to show "Handshake complete - encrypted"
 9. Type message in Chat Input
 10. Click Send button
@@ -255,35 +270,41 @@ Same as Sender, but with different usage:
 - Auto Discover Button (#discover-btn)
   * Usage: Can use to find other devices, but not required
 
-B. DECRYPTION CAPABILITIES SECTION
------------------------------------
-Location: Section "3. Decryption Capabilities" (only shown for Receiver role)
+- Refresh Button (#refresh-btn)
+  * Purpose: Refresh discovery results and check handshake status
+  * Usage: Click to refresh the discovery list and verify connection status
+  * Checks handshake status for the current connection
+
+B. DECRYPTION CONFIGURATION SECTION
+------------------------------------
+Location: Section "3. Decryption Configuration" (only shown for Receiver role)
 
 Components:
 -----------
-- Decryption Method Checkboxes
-  * Purpose: Select which decryption methods this receiver supports
-  * Options (checkboxes):
-    - Plaintext (No encryption) - Mode 0
-      * Check this to accept plaintext messages from senders
+- Decryption Mode Dropdown (#receiver-decrypt-mode)
+  * Purpose: Select the decryption method this receiver will use
+  * CRITICAL: The receiver uses a SINGLE decryption mode that must match the sender's encryption mode exactly
+  * Options:
+    - 0 - Plaintext (No encryption)
       * Use for: Testing, demonstrating MITM attacks
+      * Note: Sender must also use Encryption Mode 0
     
-    - AES-GCM Decryption - Mode 1
-      * Check this to accept AES-GCM encrypted messages
+    - 1 - AES-GCM Decryption
       * Use for: Secure communication (recommended)
       * Features: Decrypts and verifies integrity of AES-GCM messages
+      * Note: Sender must also use Encryption Mode 1
     
-    - AES-CBC + HMAC-SHA256 Decryption - Mode 2
-      * Check this to accept AES-CBC+HMAC encrypted messages
+    - 2 - AES-CBC + HMAC-SHA256 Decryption
       * Use for: Secure communication with encrypt-then-MAC
       * Features: Decrypts and verifies MAC of AES-CBC+HMAC messages
+      * Note: Sender must also use Encryption Mode 2
     
-    - Diffie-Hellman Decryption - Mode 3
-      * Check this to accept Diffie-Hellman encrypted messages
+    - 3 - Diffie-Hellman Decryption
       * Use for: Learning about DH key exchange
-  * Usage: Check all modes you want to support (can select multiple)
-  * Important: Receiver will accept connections from senders using ANY of the checked modes
-  * Example: If you check Mode 0 and Mode 1, receiver accepts both plaintext and AES-GCM senders
+      * Note: Sender must also use Encryption Mode 3
+  * Usage: Select ONE mode that matches the sender's encryption mode
+  * Important: Receiver will ONLY accept connections from senders using the EXACT same mode
+  * Example: If receiver selects Mode 1, only senders using Encryption Mode 1 can connect
 
 - Key Exchange (#receiver-kx-mode)
   * CRITICAL: Must match Sender's key exchange method
@@ -322,13 +343,13 @@ WORKFLOW FOR RECEIVER:
 2. Click "Set Role" button (role selection disappears)
 3. Note your Local IP address (share with Sender)
 4. Set Port (default 12347, share with Sender)
-5. In Decryption Capabilities section:
-   - Check which decryption methods you want to support (can select multiple)
+5. In Decryption Configuration section:
+   - Select Decryption Mode (must match Sender's Encryption Mode exactly)
    - Select Key Exchange (must match Sender)
    - If using PSK, enter Pre-shared Key (must match Sender exactly)
 6. Status shows "Receiver listening on 0.0.0.0:12347"
 7. Wait for Sender to connect
-8. Receiver will accept connection if Sender's encryption mode is in your supported list
+8. Receiver will accept connection ONLY if Sender's encryption mode matches your selected decryption mode exactly
 9. Status changes to "Handshake complete - encrypted" when connected
 10. Received messages appear in chat log as "← RECEIVED: message"
 11. If attack detected, see "✗ ATTACK FAILED: reason" or "⚠ ATTACK SUCCESS: message"
@@ -369,6 +390,21 @@ A. NETWORK SETUP SECTION
     - Attacker listens on this port (Sender connects here)
     - Attacker connects to Receiver on this port
   * Note: Usually same port for both
+
+- Auto Discover Button (#discover-btn)
+  * Purpose: Find Receiver devices on the LAN
+  * Usage: Click to scan network for available receivers
+  * Result: Shows discovered devices in discovery results area
+
+- Refresh Button (#refresh-btn)
+  * Purpose: Refresh discovery results and check handshake status
+  * Usage: Click to refresh the discovery list and verify connection status
+  * Checks handshake status for relay connections
+
+- Discovery Results (#discover-results)
+  * Purpose: Shows results from auto-discovery
+  * Format: List of devices with role and IP address (e.g., "RECEIVER: 192.168.1.20:12347")
+  * Usage: Click on a discovered device to use its IP as Target IP
 
 B. ATTACKER CONTROLS SECTION
 -----------------------------
@@ -511,7 +547,7 @@ WORKFLOW 1: Basic Plaintext Chat (No Attacker)
    - Select "receiver"
    - Click "Set Role" (role selection disappears)
    - Note IP address (e.g., 192.168.1.20)
-   - In Decryption Capabilities: Check "Plaintext (No encryption) - Mode 0"
+   - In Decryption Configuration: Select "0 - Plaintext (No encryption)"
    - Key Exchange = Pre-shared key
    - Wait for "Receiver listening"
 
@@ -522,7 +558,7 @@ WORKFLOW 1: Basic Plaintext Chat (No Attacker)
    - Port = 12347
    - Encryption Mode = 0 (Plaintext)
    - Key Exchange = Pre-shared key
-   - Click "Connect" button
+   - Sender will auto-connect (or click "Connect" button manually)
    - Wait for "Handshake complete"
 
 3. Device B sends message:
@@ -539,7 +575,7 @@ WORKFLOW 2: Secure Encrypted Chat (AES-GCM)
    - Select "receiver"
    - Click "Set Role" (role selection disappears)
    - Note IP address
-   - In Decryption Capabilities: Check "AES-GCM Decryption - Mode 1"
+   - In Decryption Configuration: Select "1 - AES-GCM Decryption"
    - Key Exchange = Pre-shared key
    - Pre-shared Key = "my-secret-key"
    - Wait for "Receiver listening"
@@ -551,7 +587,7 @@ WORKFLOW 2: Secure Encrypted Chat (AES-GCM)
    - Encryption Mode = 1 (AES-GCM)
    - Key Exchange = Pre-shared key
    - Pre-shared Key = "my-secret-key" (MUST MATCH)
-   - Click "Connect" button
+   - Sender will auto-connect (or click "Connect" button manually)
    - Wait for "Handshake complete"
 
 3. Messages are encrypted and protected
@@ -632,11 +668,12 @@ PROBLEM: Messages not received
 -------------------------------
 SOLUTION:
 - Check that handshake completed on both sides
-- Verify Encryption Mode matches exactly
+- Verify Sender's Encryption Mode matches Receiver's Decryption Mode exactly
 - Verify Key Exchange matches exactly
 - If using PSK, verify both have same Pre-shared Key
 - Check chat log for error messages
 - If using Attacker, check Attacker's chat log for dropped packets
+- Use Refresh button to check handshake status
 
 PROBLEM: Attack not working / Attack always fails
 --------------------------------------------------
@@ -661,7 +698,7 @@ PROBLEM: Wrong sections showing / Can't see options
 SOLUTION:
 - Only sections relevant to your role are shown
 - Sender: Network, Security, Chat (with input)
-- Receiver: Network, Security, Chat (no input)
+- Receiver: Network, Decryption Configuration, Chat (no input)
 - Attacker: Network, Chat (no input), Attacker Controls (Security section is hidden)
 - Click "Set Role" button after selecting role to apply
 - On startup, only role selection is shown - select role first
@@ -872,10 +909,10 @@ SENDER CHECKLIST:
 □ Clicked "Set Role" (role selection disappears)
 □ Entered Receiver/Attacker IP in Target IP
 □ Set Port (default 12347)
-□ Selected Encryption Mode (must be supported by Receiver)
+□ Selected Encryption Mode (must match Receiver's Decryption Mode exactly)
 □ Selected Key Exchange (matches Receiver)
 □ Entered Pre-shared Key if using PSK (matches Receiver)
-□ Clicked "Connect" button
+□ Auto-connected (if Target IP provided) OR clicked "Connect" button manually
 □ Waited for "Handshake complete"
 □ Typed message and clicked Send
 
@@ -884,11 +921,11 @@ RECEIVER CHECKLIST:
 □ Clicked "Set Role" (role selection disappears)
 □ Noted Local IP address
 □ Set Port (default 12347)
-□ In Decryption Capabilities: Checked supported decryption methods
+□ In Decryption Configuration: Selected decryption mode (must match Sender's encryption mode exactly)
 □ Selected Key Exchange (matches Sender)
 □ Entered Pre-shared Key if using PSK (matches Sender)
 □ Waited for "Receiver listening"
-□ Waiting for Sender to connect (Receiver accepts if Sender's mode is supported)
+□ Waiting for Sender to connect (Receiver accepts ONLY if Sender's mode matches exactly)
 
 ATTACKER CHECKLIST:
 □ Selected "attacker" role
