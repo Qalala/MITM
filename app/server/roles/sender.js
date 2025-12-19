@@ -4,7 +4,9 @@ const {
   createTcpClient,
   encodeFrame,
   decodeFrames,
-  FRAME_TYPES
+  FRAME_TYPES,
+  deriveKeyForAesCbcHmac,
+  deriveKeyForAesGcm
 } = require("./common");
 const {
   buildHello,
@@ -98,8 +100,10 @@ function createSender(config, ws) {
     const pt = Buffer.from(text, "utf8");
 
     if (useEncMode === ENC_MODES.AES_GCM) {
+      // Derive proper 32-byte key for AES-GCM
+      const derivedKey = deriveKeyForAesGcm(key);
       const nonce = generateNonce();
-      const { ciphertext, tag } = encryptGcm(key, nonce, pt, aad);
+      const { ciphertext, tag } = encryptGcm(derivedKey, nonce, pt, aad);
       return Buffer.from(
         JSON.stringify({
           seq,
@@ -112,9 +116,11 @@ function createSender(config, ws) {
     }
 
     if (useEncMode === ENC_MODES.AES_CBC_HMAC) {
+      // Derive proper 64-byte key for AES-CBC+HMAC (32 bytes encKey + 32 bytes macKey)
+      const derivedKey = deriveKeyForAesCbcHmac(key);
       const iv = generateIv();
-      const encKey = key.slice(0, 32);
-      const macKey = key.slice(32, 64);
+      const encKey = derivedKey.slice(0, 32);
+      const macKey = derivedKey.slice(32, 64);
       const { ciphertext, mac } = encryptCbcHmac(encKey, macKey, iv, pt, aad);
       return Buffer.from(
         JSON.stringify({
@@ -132,8 +138,10 @@ function createSender(config, ws) {
       if (!key) {
         throw new Error("Shared secret not available for Diffie-Hellman encryption");
       }
+      // Derive proper 32-byte key for AES-GCM
+      const derivedKey = deriveKeyForAesGcm(key);
       const nonce = generateNonce();
-      const { ciphertext, tag } = encryptGcm(key, nonce, pt, aad);
+      const { ciphertext, tag } = encryptGcm(derivedKey, nonce, pt, aad);
       return Buffer.from(
         JSON.stringify({
           seq,
@@ -364,12 +372,16 @@ function createSender(config, ws) {
       // Verify we have the necessary keys for encrypted modes
       const currentEncMode = storedConfig.encMode !== undefined ? storedConfig.encMode : encMode;
       if (currentEncMode !== ENC_MODES.PLAINTEXT) {
-        if (currentEncMode === ENC_MODES.DIFFIE_HELLMAN && !sharedSecret) {
-          sendUi(ws, { type: "error", error: "Shared secret not available. Handshake may have failed." });
+        const key = sessionKey || sharedSecret;
+        if (!key || key.length === 0) {
+          const keyType = currentEncMode === ENC_MODES.DIFFIE_HELLMAN ? "shared secret" : "session key";
+          sendUi(ws, { type: "error", error: `${keyType} not available. Handshake may have failed.` });
           return;
         }
-        if (currentEncMode !== ENC_MODES.DIFFIE_HELLMAN && !sessionKey && !sharedSecret) {
-          sendUi(ws, { type: "error", error: "Session key not available. Handshake may have failed." });
+        
+        // Validate key size for AES-CBC+HMAC (needs at least some material to derive from)
+        if (currentEncMode === ENC_MODES.AES_CBC_HMAC && key.length === 0) {
+          sendUi(ws, { type: "error", error: "Key material too short for AES-CBC+HMAC mode." });
           return;
         }
       }

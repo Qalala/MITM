@@ -236,6 +236,21 @@ wss.on("connection", (ws) => {
           }
           break;
         }
+        case "updateAttackConfig": {
+          if (currentRole !== "attacker") {
+            ws.send(JSON.stringify({ type: "error", error: "Only attacker role can update attack config" }));
+            break;
+          }
+          if (!roleInstance || !roleInstance.updateConfig) {
+            ws.send(JSON.stringify({ type: "error", error: "Attacker not initialized" }));
+            break;
+          }
+          const cfg = msg.config || {};
+          roleInstance.updateConfig(cfg);
+          ws.send(JSON.stringify({ type: "status", status: "Attack settings updated" }));
+          log("attacker", `Attack config updated: mode=${cfg.attackMode}, dropRate=${cfg.dropRate}%, delay=${cfg.delayMs}ms`);
+          break;
+        }
         default:
           ws.send(JSON.stringify({ type: "error", error: "Unknown command" }));
       }

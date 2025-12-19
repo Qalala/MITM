@@ -4,7 +4,9 @@ const {
   createTcpServer,
   encodeFrame,
   decodeFrames,
-  FRAME_TYPES
+  FRAME_TYPES,
+  deriveKeyForAesCbcHmac,
+  deriveKeyForAesGcm
 } = require("./common");
 const {
   buildNegotiate,
@@ -238,7 +240,9 @@ function createReceiver(config, ws) {
         const tag = Buffer.from(obj.tag, "base64");
         const aad = Buffer.concat([Buffer.from("DATA"), seqBuf]);
         const key = sessionKey || sharedSecret;
-        const plaintext = decryptGcm(key, nonce, ct, tag, aad);
+        // Derive proper 32-byte key for AES-GCM
+        const derivedKey = deriveKeyForAesGcm(key);
+        const plaintext = decryptGcm(derivedKey, nonce, ct, tag, aad);
         seqIn = obj.seq;
         const text = plaintext.toString("utf8");
         logUi(ws, "receiver", `RECV (AES-GCM): ${text}`);
@@ -255,8 +259,10 @@ function createReceiver(config, ws) {
         const mac = Buffer.from(obj.mac, "base64");
         const aad = Buffer.concat([Buffer.from("DATA"), seqBuf]);
         const key = sessionKey || sharedSecret;
-        const encKey = key.slice(0, 32);
-        const macKey = key.slice(32, 64);
+        // Derive proper 64-byte key for AES-CBC+HMAC (32 bytes encKey + 32 bytes macKey)
+        const derivedKey = deriveKeyForAesCbcHmac(key);
+        const encKey = derivedKey.slice(0, 32);
+        const macKey = derivedKey.slice(32, 64);
         const plaintext = decryptCbcHmac(encKey, macKey, iv, ct, mac, aad);
         seqIn = obj.seq;
         const text = plaintext.toString("utf8");
@@ -274,11 +280,13 @@ function createReceiver(config, ws) {
         if (!key) {
           throw new Error("Shared secret not available for Diffie-Hellman decryption");
         }
+        // Derive proper 32-byte key for AES-GCM
+        const derivedKey = deriveKeyForAesGcm(key);
         const nonce = Buffer.from(obj.nonce, "base64");
         const ct = Buffer.from(obj.ciphertext, "base64");
         const tag = Buffer.from(obj.tag, "base64");
         const aad = Buffer.concat([Buffer.from("DATA"), seqBuf]);
-        const plaintext = decryptGcm(key, nonce, ct, tag, aad);
+        const plaintext = decryptGcm(derivedKey, nonce, ct, tag, aad);
         seqIn = obj.seq;
         const text = plaintext.toString("utf8");
         logUi(ws, "receiver", `RECV (Diffie-Hellman): ${text}`);

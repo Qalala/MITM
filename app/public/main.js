@@ -467,6 +467,12 @@ function displayDiscoveryResults(results) {
           logLine("⚠ Ensure your decryption mode matches the sender's encryption mode", "role-selected");
           // Update status to show receiver is ready
           statusEl.textContent = `Receiver listening - will accept from ${ip}:${port}`;
+        } else if (currentRole === "attacker") {
+          // For attacker, set target IP to the discovered device
+          logLine(`Attacker target set to: ${role} at ${ip}:${port}`, "success");
+          logLine("Attacker will intercept connections to this target", "role-selected");
+          // Update status
+          statusEl.textContent = `Attacker will intercept: ${role} at ${ip}:${port}`;
         } else {
           logLine(`Selected discovered device: ${role} at ${ip}:${port}`, "success");
         }
@@ -491,6 +497,35 @@ discoverBtn.onclick = () => {
   };
   ws.send(JSON.stringify({ type: "discover", config: cfg }));
 };
+
+const updateAttackBtn = document.getElementById("update-attack-btn");
+if (updateAttackBtn) {
+  updateAttackBtn.onclick = () => {
+    ensureWs();
+    
+    if (currentRole !== "attacker") {
+      logLine("Only attacker role can update attack settings", "error");
+      return;
+    }
+    
+    const attackMode = document.getElementById("attack-mode").value;
+    const dropRate = parseInt(document.getElementById("drop-rate").value, 10) || 0;
+    const delayMs = parseInt(document.getElementById("delay-ms").value, 10) || 0;
+    const modifyText = document.getElementById("modify-text").value.trim() || "[MITM modified]";
+    
+    logLine(`Updating attack settings: Mode=${attackMode}, DropRate=${dropRate}%, Delay=${delayMs}ms`, "role-selected");
+    
+    ws.send(JSON.stringify({
+      type: "updateAttackConfig",
+      config: {
+        attackMode,
+        dropRate,
+        delayMs,
+        modifyText
+      }
+    }));
+  };
+}
 
 initInfo();
 

@@ -90,3 +90,12 @@
 [2025-12-19T14:17:23.592Z] [sender] Failed to connect: Premature close
 [2025-12-19T14:17:23.594Z] [sender] Connected to 192.168.1.10:12347, starting handshake
 [2025-12-19T14:19:56.885Z] [sender] Failed to connect: read ECONNRESET
+[2025-12-19T14:22:21.937Z] [sender] Sender configured with encryption mode: 0, KX mode: psk
+[2025-12-19T14:22:50.158Z] [sender] Updated encryption mode to 0 from connect config
+[2025-12-19T14:22:50.159Z] [sender] Connecting with encryption mode: 0, KX mode: psk
+[2025-12-19T14:22:50.162Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T14:22:50.214Z] [sender] Handshake complete, ready to send data
+[2025-12-19T14:22:55.524Z] [sender] SENT: hello
+[2025-12-19T14:23:01.556Z] [sender] SENT: hi
+[2025-12-19T14:23:21.865Z] [sender] SENT: a7a
+[2025-12-19T14:24:02.374Z] [sender] SENT: hi
