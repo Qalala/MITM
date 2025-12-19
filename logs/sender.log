@@ -372,3 +372,15 @@
 [2025-12-19T22:59:05.355Z] [sender] SENT: hi
 [2025-12-19T22:59:19.124Z] [sender] SENT: hi
 [2025-12-19T22:59:37.896Z] [sender] Background receive error: read ECONNRESET
+[2025-12-19T23:20:48.145Z] [sender] Sender configured with encryption mode: 0, KX mode: psk
+[2025-12-19T23:21:01.662Z] [sender] Received encryption change broadcast: mode=0, kx=psk from receiver at 192.168.1.10
+[2025-12-19T23:21:39.735Z] [sender] Updated encryption mode to 0 from connect config
+[2025-12-19T23:21:39.736Z] [sender] Connecting with encryption mode: 0, KX mode: psk
+[2025-12-19T23:21:39.829Z] [sender] Connected to 192.168.1.7:12347, starting handshake
+[2025-12-19T23:21:40.002Z] [sender] Failed to connect: read ECONNRESET
+[2025-12-19T23:22:25.785Z] [sender] Updated encryption mode to 0 from connect config
+[2025-12-19T23:22:25.785Z] [sender] Connecting with encryption mode: 0, KX mode: psk
+[2025-12-19T23:22:25.805Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T23:22:25.860Z] [sender] Handshake complete, ready to send data
+[2025-12-19T23:22:39.889Z] [sender] SENT: hi
+[2025-12-19T23:23:41.537Z] [sender] Background receive error: read ECONNRESET

@@ -9,10 +9,11 @@ const {
 const { ENC_MODES } = require("../../../core/protocol/constants");
 
 function createAttacker(config, ws) {
-  // True MITM Interception Mode:
-  // Attacker attempts to bind to receiver's IP to intercept connections transparently
-  // When sender connects to receiver's IP, attacker intercepts and forwards to real receiver
-  // This is true MITM - sender connects to receiver's IP, attacker is in the middle
+  // MITM Proxy Mode:
+  // Attacker listens on all interfaces (0.0.0.0) like receiver
+  // Sender connects to attacker's IP, attacker intercepts and forwards to receiver
+  // This is application-layer MITM - attacker is in the middle of all communication
+  const listenIp = "0.0.0.0"; // Always listen on all interfaces (like receiver)
   const listenPort = config.port || 12347;
   let targetIp = config.targetIp || null; // Receiver's IP (victim) - where to forward intercepted traffic
   let targetPort = config.port || 12347;
@@ -20,10 +21,6 @@ function createAttacker(config, ws) {
   let dropRate = Number(config.dropRate || 0);
   let delayMs = Number(config.delayMs || 0);
   let modifyText = (config.modifyText && config.modifyText.trim()) || "[MITM modified]";
-  
-  // Try to bind to receiver's IP for true interception
-  // If that fails, fall back to 0.0.0.0 (requires sender to connect to attacker's IP)
-  let listenIp = targetIp || "0.0.0.0";
   
   let attackActive = false;
 
@@ -99,23 +96,16 @@ function createAttacker(config, ws) {
         });
       });
       // Use backlog=1 to enforce single connection semantics (like receiver)
-      // Try to bind to receiver's IP first for true MITM interception
+      // Attacker always listens on 0.0.0.0 (all interfaces) - works on any machine
       server.listen(listenPort, listenIp, 1, () => {
-        if (targetIp && listenIp === targetIp) {
-          logAttack(`[TRUE MITM] Attacker bound to receiver's IP ${targetIp}:${listenPort} - TRUE INTERCEPTION ACTIVE`, "success");
-          logAttack(`[TRUE MITM] Sender connects to receiver's IP (${targetIp}), attacker intercepts transparently`, "success");
-          logAttack(`[TRUE MITM] Attacker is invisible to discovery - sender/receiver cannot detect attacker`, "info");
+        if (targetIp) {
+          logAttack(`[MITM] Attacker listening on ${listenIp}:${listenPort} (stealth mode - not discoverable)`, "success");
+          logAttack(`[MITM] Sender should connect to attacker's IP (shown in Local IP)`, "info");
+          logAttack(`[MITM] Attacker will intercept and forward to receiver at ${targetIp}:${targetPort}`, "info");
+          logAttack(`[MITM] Attacker is invisible to discovery - sender/receiver cannot detect attacker`, "info");
           sendUi(ws, {
             type: "status",
-            status: `TRUE MITM Active: Intercepting on ${targetIp}:${listenPort}. Sender connects to receiver's IP, attacker is in the middle.`
-          });
-        } else if (targetIp) {
-          logAttack(`[FALLBACK] Cannot bind to receiver IP ${targetIp}, listening on 0.0.0.0:${listenPort}`, "warning");
-          logAttack(`[FALLBACK] For true MITM: Attacker and receiver must be on same machine, or use network-level interception`, "warning");
-          logAttack(`[FALLBACK] Sender must connect to attacker's IP (shown in Local IP) for interception to work`, "warning");
-          sendUi(ws, {
-            type: "status",
-            status: `MITM Fallback: Listening on 0.0.0.0:${listenPort}. Sender must connect to attacker's IP (not receiver's IP).`
+            status: `MITM Active: Listening on ${listenIp}:${listenPort}. Sender connects to attacker's IP, attacker intercepts and forwards to receiver (${targetIp}:${targetPort}).`
           });
         } else {
           logAttack(`[MITM] Attacker listening on ${listenIp}:${listenPort} (stealth mode)`, "info");
@@ -127,24 +117,8 @@ function createAttacker(config, ws) {
         }
       });
       server.on("error", (err) => {
-        // If binding to receiver's IP failed, fall back to 0.0.0.0
-        if (targetIp && listenIp === targetIp && (err.code === "EADDRNOTAVAIL" || err.code === "EACCES")) {
-          logAttack(`[FALLBACK] Cannot bind to receiver IP ${targetIp}: ${err.message}`, "warning");
-          logAttack(`[FALLBACK] Falling back to 0.0.0.0 - attacker and receiver must be on same machine for true MITM`, "warning");
-          listenIp = "0.0.0.0";
-          // Retry on 0.0.0.0
-          server.listen(listenPort, listenIp, 1, () => {
-            logAttack(`[FALLBACK] Attacker listening on 0.0.0.0:${listenPort}`, "info");
-            logAttack(`[FALLBACK] Sender must connect to attacker's IP (shown in Local IP) for interception`, "warning");
-            sendUi(ws, {
-              type: "status",
-              status: `MITM Fallback: Listening on 0.0.0.0:${listenPort}. Sender must connect to attacker's IP.`
-            });
-          });
-        } else {
-          logUi(ws, "attacker", `Server error: ${err.message}`);
-          sendUi(ws, { type: "error", error: `Server error: ${err.message}` });
-        }
+        logUi(ws, "attacker", `Server error: ${err.message}`);
+        sendUi(ws, { type: "error", error: `Server error: ${err.message}` });
       });
     } catch (e) {
       logUi(ws, "attacker", `Attacker failed to start: ${e.message}`);
@@ -184,15 +158,9 @@ function createAttacker(config, ws) {
       return;
     }
     
-    // Determine where to forward: if attacker bound to receiver's IP (same machine), forward to localhost
-    // Otherwise, forward to receiver's actual IP
-    let forwardIp = actualTargetIp;
-    if (listenIp === actualTargetIp) {
-      // Attacker bound to receiver's IP - they're on same machine
-      // Forward to localhost so receiver can listen on 0.0.0.0 without conflict
-      forwardIp = "127.0.0.1";
-      logAttack(`[TRUE MITM] Attacker bound to receiver's IP - forwarding to localhost (same machine)`, "info");
-    }
+    // Forward to receiver's actual IP address
+    // Attacker and receiver are on different machines (normal case)
+    const forwardIp = actualTargetIp;
     
     logAttack(`Sender connected to attacker, connecting to real receiver at ${forwardIp}:${targetPort}`, "info");
     logAttack(`[MITM] Attacker is in the middle: Sender -> Attacker -> Receiver`, "success");
@@ -221,7 +189,8 @@ function createAttacker(config, ws) {
         logAttack(`[MITM] Attacks activated automatically - mode: ${mode}`, "success");
       }
       
-      logAttack("Connected to real receiver, starting bidirectional relay with attack modes", "info");
+      logAttack(`[MITM] Successfully connected to receiver at ${forwardIp}:${targetPort}`, "success");
+      logAttack(`[MITM] Starting bidirectional relay with attack modes`, "info");
       logAttack(`[MITM] Relay active: Sender <-> Attacker <-> Receiver`, "success");
       logAttack(`[MITM] Attack mode: ${mode} - attacks will be applied to intercepted traffic`, "success");
       if (mode === "drop" && dropRate > 0) {
@@ -293,8 +262,14 @@ function createAttacker(config, ws) {
         cleanupConnections();
       });
     } catch (e) {
-      logAttack(`Failed to connect to receiver at ${actualTargetIp}:${targetPort}: ${e.message}`, "failed");
-      sendUi(ws, { type: "error", error: `Failed to connect to receiver: ${e.message}. Check that receiver is running and Receiver IP is correct.` });
+      const errorMsg = e.message || "Unknown error";
+      logAttack(`[MITM] Failed to connect to receiver at ${actualTargetIp}:${targetPort}: ${errorMsg}`, "failed");
+      logAttack(`[MITM] Troubleshooting:`, "warning");
+      logAttack(`[MITM] 1. Ensure receiver is running and listening on ${actualTargetIp}:${targetPort}`, "warning");
+      logAttack(`[MITM] 2. Check that receiver IP (${actualTargetIp}) is correct`, "warning");
+      logAttack(`[MITM] 3. Verify both devices are on the same network`, "warning");
+      logAttack(`[MITM] 4. Check firewall settings on receiver device`, "warning");
+      sendUi(ws, { type: "error", error: `Failed to connect to receiver: ${errorMsg}. Check that receiver is running on ${actualTargetIp}:${targetPort} and IP is correct.` });
       try {
         if (clientConn) {
           clientConn.end();
@@ -569,16 +544,10 @@ function createAttacker(config, ws) {
     
     logAttack("Attacker is ready. Waiting for sender to connect...", "info");
     if (targetIp) {
-      if (listenIp === targetIp) {
-        logAttack(`[TRUE MITM] Sender should connect to receiver's IP: ${targetIp}:${targetPort}`, "success");
-        logAttack(`[TRUE MITM] Attacker will transparently intercept and forward to receiver`, "success");
-        logAttack(`[TRUE MITM] Attacker is invisible - not discoverable by sender or receiver`, "info");
-        logAttack(`[TRUE MITM] Attack modes will be applied to intercepted traffic`, "info");
-      } else {
-        logAttack(`[FALLBACK] Cannot intercept on receiver's IP - attacker and receiver must be on same machine`, "warning");
-        logAttack(`[FALLBACK] Sender must connect to attacker's IP (shown in Local IP) for interception`, "warning");
-        logAttack(`[FALLBACK] Attacker will forward to receiver at ${targetIp}:${targetPort}`, "info");
-      }
+      logAttack(`[MITM] Sender should connect to attacker's IP (shown in Local IP)`, "info");
+      logAttack(`[MITM] Attacker will intercept and forward to receiver at ${targetIp}:${targetPort}`, "info");
+      logAttack(`[MITM] Attacker is invisible - not discoverable by sender or receiver`, "info");
+      logAttack(`[MITM] Attack modes will be applied to intercepted traffic`, "info");
     } else {
       logAttack(`[MITM] Configure receiver's IP in Target IP field`, "warning");
       logAttack(`[MITM] Attacker is listening and will intercept connections`, "info");

@@ -115,15 +115,15 @@
         <div style="margin-bottom: 12px;">
           <h3 style="margin: 8px 0; color: #ff6b6b;">Victim Selection</h3>
           <p style="color: #9e9e9e; font-size: 0.9em; margin-bottom: 12px;">
-            <strong>Passive MITM Mode (Stealth):</strong> Enter the victim's (Receiver's) IP address in the Target IP field above.
-            The attacker listens passively on all interfaces (like receiver) and is <strong>invisible to discovery</strong>.
-            The attacker will intercept connections when the Sender connects to the Receiver's IP and forward to the real receiver.
+            <strong>MITM Proxy Mode (Stealth):</strong> Enter the victim's (Receiver's) IP address in the Target IP field above.
+            The attacker listens on all interfaces (like receiver) and is <strong>invisible to discovery</strong>.
+            <strong>Sender connects to attacker's IP</strong> (shown in Local IP), attacker intercepts and forwards to receiver.
           </p>
           <p style="color: #4caf50; font-size: 0.85em; margin-bottom: 12px; font-weight: bold;">
             ✅ Attacker is invisible - not discoverable by sender or receiver
           </p>
-          <p style="color: #ff6b6b; font-size: 0.85em; margin-bottom: 12px; font-weight: bold;">
-            ⚠️ For MITM interception: Sender should connect to Receiver's IP. Attacker will intercept transparently.
+          <p style="color: #2196F3; font-size: 0.85em; margin-bottom: 12px; font-weight: bold;">
+            📍 <strong>Connection Instructions:</strong> Sender must connect to <strong>Attacker's IP</strong> (shown in Local IP), NOT receiver's IP. Attacker will intercept and forward to receiver.
           </p>
           <button id="start-attack-btn" style="background: #ff6b6b; color: white; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Start Attack</button>
         </div>
