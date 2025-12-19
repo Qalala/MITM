@@ -84,10 +84,15 @@ function createReceiver(config, ws) {
       
       logUi(ws, "receiver", `Received HELLO: sender encMode=${senderEncMode}, receiver expects encMode=${encMode}`);
       
-      if (senderEncMode !== encMode) {
-        logUi(ws, "receiver", `Encryption mode mismatch: sender uses ${senderEncMode}, receiver expects ${encMode}`);
-        sendUi(ws, { type: "error", error: `Encryption mode mismatch: sender uses ${senderEncMode}, receiver expects ${encMode}` });
-        const err = { reason: "mode_mismatch", message: `Encryption mode mismatch: sender uses ${senderEncMode}, receiver expects ${encMode}` };
+      // Ensure both are numbers for proper comparison
+      const senderModeNum = Number(senderEncMode);
+      const receiverModeNum = Number(encMode);
+      
+      if (senderModeNum !== receiverModeNum) {
+        const errorMsg = `Encryption mode mismatch: sender uses ${senderModeNum}, receiver expects ${receiverModeNum}. Please ensure both sender and receiver use the same encryption mode.`;
+        logUi(ws, "receiver", errorMsg);
+        sendUi(ws, { type: "error", error: errorMsg });
+        const err = { reason: "mode_mismatch", message: errorMsg };
         conn.write(encodeFrame(FRAME_TYPES.ERROR, Buffer.from(JSON.stringify(err))));
         conn.end();
         conn = null; // Allow new connection

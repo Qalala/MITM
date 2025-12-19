@@ -220,7 +220,12 @@ setRoleBtn.onclick = async () => {
   };
   
   if (role === "sender") {
-    const encMode = parseInt(document.getElementById("enc-mode").value, 10);
+    const encModeStr = document.getElementById("enc-mode").value;
+    const encMode = parseInt(encModeStr, 10);
+    if (isNaN(encMode) || encMode < 0 || encMode > 3) {
+      logLine(`Invalid encryption mode: ${encModeStr}. Please select a valid mode (0-3).`, "error");
+      return;
+    }
     const kxMode = document.getElementById("kx-mode").value;
     const psk = document.getElementById("psk-input").value;
     const demo = document.getElementById("demo-mode").checked;
@@ -231,7 +236,12 @@ setRoleBtn.onclick = async () => {
     logLine(`Sender configured: Encryption Mode=${encMode}, KX Mode=${kxMode}`, "role-selected");
   } else if (role === "receiver") {
     // Get decryption mode from dropdown
-    const decryptionMode = parseInt(document.getElementById("receiver-decrypt-mode").value, 10);
+    const decryptionModeStr = document.getElementById("receiver-decrypt-mode").value;
+    const decryptionMode = parseInt(decryptionModeStr, 10);
+    if (isNaN(decryptionMode) || decryptionMode < 0 || decryptionMode > 3) {
+      logLine(`Invalid decryption mode: ${decryptionModeStr}. Please select a valid mode (0-3).`, "error");
+      return;
+    }
     const kxMode = document.getElementById("receiver-kx-mode").value;
     const psk = document.getElementById("receiver-psk-input").value;
     const demo = document.getElementById("receiver-demo-mode").checked;
@@ -240,6 +250,7 @@ setRoleBtn.onclick = async () => {
     config.psk = psk;
     config.demo = demo;
     logLine(`Receiver configured: Decryption Mode=${decryptionMode}, KX Mode=${kxMode}`, "role-selected");
+    logLine(`⚠ IMPORTANT: Receiver will only accept connections from senders using Encryption Mode ${decryptionMode}`, "role-selected");
   }
 
   // Clear chat log when setting new role
@@ -262,7 +273,7 @@ setRoleBtn.onclick = async () => {
   // Sender will auto-connect on the server side if target IP is provided or discovered
 };
 
-connectBtn.onclick = () => {
+connectBtn.onclick = async () => {
   ensureWs();
   
   // Check role from dropdown, not just currentRole variable
@@ -270,11 +281,6 @@ connectBtn.onclick = () => {
   if (role !== "sender") {
     logLine("Only sender role can connect. Please select 'Sender' role first.", "error");
     return;
-  }
-  
-  // Update currentRole if it's not set
-  if (!currentRole) {
-    currentRole = role;
   }
   
   const targetIp = document.getElementById("target-ip").value.trim();
@@ -289,6 +295,51 @@ connectBtn.onclick = () => {
   const kxMode = document.getElementById("kx-mode").value;
   const psk = document.getElementById("psk-input").value;
   const demo = document.getElementById("demo-mode").checked;
+  
+  // Validate encryption mode
+  if (isNaN(encMode) || encMode < 0 || encMode > 3) {
+    logLine(`Invalid encryption mode: ${encMode}. Please select a valid mode (0-3).`, "error");
+    return;
+  }
+  
+  // If sender role hasn't been set yet, or if current role is different, set it first
+  if (currentRole !== "sender") {
+    logLine("Setting sender role with current configuration...", "role-selected");
+    currentRole = "sender";
+    handshakeComplete = false;
+    
+    // Show status section
+    statusEl.style.display = "block";
+    
+    // Show role-specific sections
+    showRoleSections("sender");
+    
+    // Get all config
+    const config = {
+      targetIp,
+      port,
+      transport,
+      encMode,
+      kxMode,
+      psk,
+      demo
+    };
+    
+    logLine(`Sender configured: Encryption Mode=${encMode}, KX Mode=${kxMode}`, "role-selected");
+    
+    // Send configureRole first
+    await new Promise((resolve) => {
+      ws.send(
+        JSON.stringify({
+          type: "configureRole",
+          role: "sender",
+          config
+        })
+      );
+      // Small delay to ensure role is configured
+      setTimeout(resolve, 100);
+    });
+  }
   
   handshakeComplete = false;
   logLine(`Connecting to ${targetIp}:${port}...`, "role-selected");

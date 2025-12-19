@@ -172,14 +172,20 @@ function createSender(config, ws) {
   }
 
   async function connect(connectConfig) {
-    // Update config if provided
+    // Update config if provided - prioritize connectConfig values
     if (connectConfig) {
       if (connectConfig.targetIp) targetIp = connectConfig.targetIp;
       if (connectConfig.port) port = connectConfig.port;
       if (connectConfig.transport) transport = connectConfig.transport;
-      if (connectConfig.encMode !== undefined) encMode = Number(connectConfig.encMode);
+      // Always update encryption mode from connect config if provided
+      if (connectConfig.encMode !== undefined && connectConfig.encMode !== null) {
+        encMode = Number(connectConfig.encMode);
+        logUi(ws, "sender", `Updated encryption mode to ${encMode} from connect config`);
+      }
       if (connectConfig.kxMode) kxMode = connectConfig.kxMode;
-      if (connectConfig.psk) psk = Buffer.from(connectConfig.psk);
+      if (connectConfig.psk !== undefined) {
+        psk = connectConfig.psk ? Buffer.from(connectConfig.psk) : null;
+      }
       if (connectConfig.demo !== undefined) demo = !!connectConfig.demo;
       
       // Update stored config
@@ -193,6 +199,9 @@ function createSender(config, ws) {
     const connectKxMode = kxMode;
     const connectPsk = psk;
     const connectDemo = demo;
+    
+    // Log the actual values being used for connection
+    logUi(ws, "sender", `Connecting with encryption mode: ${connectEncMode}, KX mode: ${connectKxMode}`);
     
     // Clean up existing connection if any
     if (socket) {
