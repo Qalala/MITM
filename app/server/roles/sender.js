@@ -242,8 +242,14 @@ function createSender(config, ws) {
         throw new Error("Expected NEGOTIATE frame");
       }
       const nego = JSON.parse(negotiate.value.payload.toString("utf8"));
-      if (nego.encMode !== connectEncMode || nego.kxMode !== connectKxMode) {
-        throw new Error("Receiver refused parameters (downgrade prevention)");
+      
+      // Ensure proper comparison - convert to numbers for encMode, strings for kxMode
+      const negoEncMode = Number(nego.encMode);
+      const negoKxMode = String(nego.kxMode).toLowerCase();
+      const connectKxModeStr = String(connectKxMode).toLowerCase();
+      
+      if (negoEncMode !== connectEncMode || negoKxMode !== connectKxModeStr) {
+        throw new Error(`Receiver refused parameters (downgrade prevention): sender encMode=${connectEncMode}, receiver encMode=${negoEncMode}, sender kxMode=${connectKxMode}, receiver kxMode=${nego.kxMode}`);
       }
 
       const kx = await frameIter.next();
@@ -276,8 +282,10 @@ function createSender(config, ws) {
       }
       handshakeDone = true;
       logUi(ws, "sender", "Handshake complete, ready to send data");
-      sendUi(ws, { type: "status", status: "Handshake complete - connection established" });
+      
+      // Send handshake status update - this is critical for client to know handshake is complete
       sendUi(ws, { type: "handshakeStatus", complete: true, status: "Handshake complete - connection established" });
+      sendUi(ws, { type: "status", status: "Handshake complete - connection established" });
       
       listenForFrames().catch((e) =>
         logUi(ws, "sender", `Background receive error: ${e.message}`)
@@ -319,27 +327,68 @@ function createSender(config, ws) {
         });
         return;
       }
-      if (!socket || !handshakeDone) {
-        sendUi(ws, { type: "error", error: "Handshake not complete. Wait for connection..." });
+      
+      // Verify handshake is complete - check both socket and handshakeDone flag
+      if (!socket) {
+        sendUi(ws, { type: "error", error: "Not connected. Please connect first." });
         return;
       }
-      const payload = buildDataPayload(text);
-      socket.write(encodeFrame(FRAME_TYPES.DATA, payload));
-      logUi(ws, "sender", `SENT: ${text}`);
-      sendUi(ws, { type: "messageSent", text });
+      
+      if (!handshakeDone) {
+        sendUi(ws, { type: "error", error: "Handshake not complete. Wait for connection..." });
+        // Also send current handshake status
+        const currentEncMode = storedConfig.encMode !== undefined ? storedConfig.encMode : encMode;
+        const isComplete = socket && handshakeDone && (
+          currentEncMode === ENC_MODES.PLAINTEXT || 
+          (currentEncMode === ENC_MODES.DIFFIE_HELLMAN && sharedSecret) ||
+          (currentEncMode !== ENC_MODES.DIFFIE_HELLMAN && (sessionKey || sharedSecret))
+        );
+        sendUi(ws, { 
+          type: "handshakeStatus", 
+          complete: isComplete, 
+          status: isComplete ? "Handshake complete - connection established" : (socket ? (handshakeDone ? "Handshake complete" : "Handshake in progress...") : "Not connected")
+        });
+        return;
+      }
+      
+      // Verify we have the necessary keys for encrypted modes
+      const currentEncMode = storedConfig.encMode !== undefined ? storedConfig.encMode : encMode;
+      if (currentEncMode !== ENC_MODES.PLAINTEXT) {
+        if (currentEncMode === ENC_MODES.DIFFIE_HELLMAN && !sharedSecret) {
+          sendUi(ws, { type: "error", error: "Shared secret not available. Handshake may have failed." });
+          return;
+        }
+        if (currentEncMode !== ENC_MODES.DIFFIE_HELLMAN && !sessionKey && !sharedSecret) {
+          sendUi(ws, { type: "error", error: "Session key not available. Handshake may have failed." });
+          return;
+        }
+      }
+      
+      try {
+        const payload = buildDataPayload(text, currentEncMode);
+        socket.write(encodeFrame(FRAME_TYPES.DATA, payload));
+        logUi(ws, "sender", `SENT: ${text}`);
+        sendUi(ws, { type: "messageSent", text });
+      } catch (e) {
+        logUi(ws, "sender", `Failed to send message: ${e.message}`);
+        sendUi(ws, { type: "error", error: `Failed to send message: ${e.message}` });
+      }
     },
     checkHandshake() {
+      // Use the current encryption mode (may have been updated during connect)
+      const currentEncMode = storedConfig.encMode !== undefined ? storedConfig.encMode : encMode;
+      
       // For plaintext mode, handshake is complete if connection exists and handshakeDone is true
       // For encrypted modes (AES-GCM, AES-CBC+HMAC), we need sessionKey
       // For Diffie-Hellman mode, we need sharedSecret
       const isComplete = socket && handshakeDone && (
-        encMode === ENC_MODES.PLAINTEXT || 
-        (encMode === ENC_MODES.DIFFIE_HELLMAN && sharedSecret) ||
-        (encMode !== ENC_MODES.DIFFIE_HELLMAN && (sessionKey || sharedSecret))
+        currentEncMode === ENC_MODES.PLAINTEXT || 
+        (currentEncMode === ENC_MODES.DIFFIE_HELLMAN && sharedSecret) ||
+        (currentEncMode !== ENC_MODES.DIFFIE_HELLMAN && (sessionKey || sharedSecret))
       );
       return {
         complete: isComplete,
-        status: isComplete ? "Handshake complete - encrypted" : (socket ? (handshakeDone ? "Handshake complete" : "Handshake in progress...") : "Not connected")
+        status: isComplete ? "Handshake complete - connection established" : (socket ? (handshakeDone ? "Handshake complete" : "Handshake in progress...") : "Not connected")
       };
     }
   };

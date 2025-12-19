@@ -134,8 +134,8 @@ function ensureWs() {
       const msg = JSON.parse(ev.data);
       if (msg.type === "status") {
         statusEl.textContent = msg.status;
-        // Check if handshake is complete
-        if (msg.status && msg.status.toLowerCase().includes("handshake complete")) {
+        // Check if handshake is complete - but don't override handshakeStatus messages
+        if (msg.status && msg.status.toLowerCase().includes("handshake complete") && !handshakeComplete) {
           handshakeComplete = true;
           logLine("✓ Handshake complete - ready to send/receive", "success");
         } else if (msg.status && msg.status.toLowerCase().includes("listening")) {
@@ -157,11 +157,16 @@ function ensureWs() {
       } else if (msg.type === "messageReceived") {
         logLine(`← RECEIVED: ${msg.text}`, "message-received");
       } else if (msg.type === "handshakeStatus") {
-        // Update handshake status
+        // Update handshake status - this is the authoritative source
+        const wasComplete = handshakeComplete;
         handshakeComplete = msg.complete;
+        
         if (msg.complete) {
-          logLine(`✓ ${msg.status}`, "success");
-          logLine("✓ Handshake complete - connection established", "success");
+          if (!wasComplete) {
+            // Only log if this is a new completion
+            logLine(`✓ ${msg.status}`, "success");
+            logLine("✓ Handshake complete - connection established", "success");
+          }
           statusEl.textContent = msg.status;
         } else {
           // Only log if it's a meaningful status change

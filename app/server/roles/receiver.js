@@ -82,12 +82,23 @@ function createReceiver(config, ws) {
       const senderEncMode = helloPayload.encMode;
       const senderKxMode = helloPayload.kxMode;
       
-      logUi(ws, "receiver", `Received HELLO: sender encMode=${senderEncMode}, receiver expects encMode=${encMode}`);
-      
-      // Ensure both are numbers for proper comparison
+      // Ensure both are numbers for proper comparison - handle both string and number types
       const senderModeNum = Number(senderEncMode);
       const receiverModeNum = Number(encMode);
       
+      // Validate that conversion was successful
+      if (isNaN(senderModeNum) || isNaN(receiverModeNum)) {
+        const errorMsg = `Invalid encryption mode: sender=${senderEncMode}, receiver=${encMode}`;
+        logUi(ws, "receiver", errorMsg);
+        sendUi(ws, { type: "error", error: errorMsg });
+        const err = { reason: "mode_mismatch", message: errorMsg };
+        conn.write(encodeFrame(FRAME_TYPES.ERROR, Buffer.from(JSON.stringify(err))));
+        conn.end();
+        conn = null;
+        return;
+      }
+      
+      // Compare encryption modes
       if (senderModeNum !== receiverModeNum) {
         const errorMsg = `Encryption mode mismatch: sender uses ${senderModeNum}, receiver expects ${receiverModeNum}. Please ensure both sender and receiver use the same encryption mode.`;
         logUi(ws, "receiver", errorMsg);
@@ -99,9 +110,15 @@ function createReceiver(config, ws) {
         return;
       }
       
-      if (senderKxMode !== kxMode) {
-        logUi(ws, "receiver", "Key exchange mode mismatch");
-        const err = { reason: "mode_mismatch", message: `Key exchange mode mismatch: sender uses ${senderKxMode}, receiver uses ${kxMode}` };
+      // Compare key exchange modes - handle both string and enum comparisons
+      const senderKxStr = String(senderKxMode).toLowerCase();
+      const receiverKxStr = String(kxMode).toLowerCase();
+      
+      if (senderKxStr !== receiverKxStr) {
+        const errorMsg = `Key exchange mode mismatch: sender uses ${senderKxMode}, receiver uses ${kxMode}`;
+        logUi(ws, "receiver", errorMsg);
+        sendUi(ws, { type: "error", error: errorMsg });
+        const err = { reason: "mode_mismatch", message: errorMsg };
         conn.write(encodeFrame(FRAME_TYPES.ERROR, Buffer.from(JSON.stringify(err))));
         conn.end();
         conn = null; // Allow new connection
