@@ -114,3 +114,10 @@
 [2025-12-19T15:22:25.718Z] [sender] Connecting with encryption mode: 0, KX mode: psk
 [2025-12-19T15:22:26.624Z] [sender] Failed to connect: connect ETIMEDOUT 192.168.1.10:12347
 [2025-12-19T15:22:46.720Z] [sender] Failed to connect: connect ETIMEDOUT 192.168.1.10:12347
+[2025-12-19T15:27:15.803Z] [sender] Sender configured with encryption mode: 0, KX mode: psk
+[2025-12-19T15:27:36.084Z] [sender] Updated encryption mode to 0 from connect config
+[2025-12-19T15:27:36.084Z] [sender] Connecting with encryption mode: 0, KX mode: psk
+[2025-12-19T15:27:36.089Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T15:27:36.143Z] [sender] Handshake complete, ready to send data
+[2025-12-19T15:27:39.584Z] [sender] SENT: hi
+[2025-12-19T15:28:02.765Z] [sender] Background receive error: read ECONNRESET

@@ -213,6 +213,84 @@ wss.on("connection", (ws) => {
           }
           break;
         }
+        case "updateSecurityConfig": {
+          if (!currentRole) {
+            ws.send(JSON.stringify({ type: "error", error: "No role selected. Please set a role first." }));
+            break;
+          }
+          
+          if (currentRole !== msg.role) {
+            ws.send(JSON.stringify({ type: "error", error: "Role mismatch. Please set the correct role first." }));
+            break;
+          }
+          
+          const cfg = msg.config || {};
+          
+          // Update the role instance with new security config
+          if (roleInstance && roleInstance.updateSecurityConfig) {
+            await roleInstance.updateSecurityConfig(cfg);
+            ws.send(JSON.stringify({ type: "status", status: `Security settings updated for ${currentRole}` }));
+          } else if (roleInstance) {
+            // If updateSecurityConfig is not available, recreate the instance with new config
+            // This is a fallback for roles that don't support dynamic updates
+            if (roleInstance.stop) {
+              await roleInstance.stop();
+            }
+            
+            // Recreate with new config
+            if (currentRole === "sender") {
+              roleInstance = createSender(cfg, ws);
+            } else if (currentRole === "receiver") {
+              roleInstance = createReceiver(cfg, ws);
+            } else if (currentRole === "attacker") {
+              roleInstance = createAttacker(cfg, ws);
+            }
+            
+            ws.send(JSON.stringify({ type: "status", status: `Security settings updated for ${currentRole}` }));
+          } else {
+            ws.send(JSON.stringify({ type: "error", error: "Role instance not available" }));
+          }
+          break;
+        }
+        case "startAttack": {
+          if (currentRole !== "attacker") {
+            ws.send(JSON.stringify({ type: "error", error: "Only attacker role can start attacks" }));
+            break;
+          }
+          
+          if (!roleInstance) {
+            ws.send(JSON.stringify({ type: "error", error: "Attacker role not configured. Please set role to 'Attacker' first." }));
+            break;
+          }
+          
+          const cfg = msg.config || {};
+          if (roleInstance && roleInstance.startAttack) {
+            await roleInstance.startAttack(cfg);
+          } else {
+            ws.send(JSON.stringify({ type: "error", error: "Attack functionality not available" }));
+          }
+          break;
+        }
+        case "updateAttackConfig": {
+          if (currentRole !== "attacker") {
+            ws.send(JSON.stringify({ type: "error", error: "Only attacker role can update attack config" }));
+            break;
+          }
+          
+          if (!roleInstance) {
+            ws.send(JSON.stringify({ type: "error", error: "Attacker role not configured" }));
+            break;
+          }
+          
+          const cfg = msg.config || {};
+          if (roleInstance && roleInstance.updateAttackConfig) {
+            await roleInstance.updateAttackConfig(cfg);
+            ws.send(JSON.stringify({ type: "status", status: "Attack configuration updated" }));
+          } else {
+            ws.send(JSON.stringify({ type: "error", error: "Attack config update not available" }));
+          }
+          break;
+        }
         case "checkHandshake": {
           if (!currentRole) {
             ws.send(JSON.stringify({ 

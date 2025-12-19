@@ -150,8 +150,12 @@ function ensureWs() {
         logLine("ERROR: " + msg.error, "error");
       } else if (msg.type === "attackSuccess") {
         logLine(`⚠ ATTACK SUCCESS: ${msg.message}`, "attack-success");
+        addAttackLog(`✓ SUCCESS: ${msg.message}`, "success");
       } else if (msg.type === "attackFailed") {
         logLine(`✗ ATTACK FAILED: ${msg.message}`, "attack-failed");
+        addAttackLog(`✗ FAILED: ${msg.message}`, "failed");
+      } else if (msg.type === "attackLog") {
+        addAttackLog(msg.message, msg.level || "info");
       } else if (msg.type === "messageSent") {
         logLine(`→ SENT: ${msg.text}`, "message-sent");
       } else if (msg.type === "messageReceived") {
@@ -410,14 +414,26 @@ function displayDiscoveryResults(results) {
     discoverResults.innerHTML = "<div style='color: #eaeaea;'>No devices found. Make sure other devices have set their roles and are on the same network.</div>";
     return;
   }
-  
+
   const title = document.createElement("div");
   title.textContent = `Found ${results.length} device(s):`;
   title.style.marginBottom = "8px";
   title.style.fontWeight = "bold";
   title.style.color = "#eaeaea";
   discoverResults.appendChild(title);
-  
+
+  // For attacker role, also update the attacker targets list
+  const attackerTargets = document.getElementById("attacker-targets");
+  if (currentRole === "attacker" && attackerTargets && results.length > 0) {
+    attackerTargets.innerHTML = "";
+    const attackerTitle = document.createElement("div");
+    attackerTitle.textContent = `Found ${results.length} device(s):`;
+    attackerTitle.style.marginBottom = "8px";
+    attackerTitle.style.fontWeight = "bold";
+    attackerTitle.style.color = "#ff6b6b";
+    attackerTargets.appendChild(attackerTitle);
+  }
+
   results.forEach(result => {
     // Parse result format: "role@ip:port"
     const match = result.match(/^([^@]+)@(.+):(\d+)$/);
@@ -471,6 +487,12 @@ function displayDiscoveryResults(results) {
           // For attacker, set target IP to the discovered device
           logLine(`Attacker target set to: ${role} at ${ip}:${port}`, "success");
           logLine("Attacker will intercept connections to this target", "role-selected");
+          // Update attacker UI
+          if (role === "sender") {
+            document.getElementById("attacker-sender-ip").value = ip;
+          } else if (role === "receiver") {
+            document.getElementById("attacker-receiver-ip").value = ip;
+          }
           // Update status
           statusEl.textContent = `Attacker will intercept: ${role} at ${ip}:${port}`;
         } else {
@@ -479,6 +501,42 @@ function displayDiscoveryResults(results) {
       };
       
       discoverResults.appendChild(div);
+      
+      // Also add to attacker targets list
+      if (currentRole === "attacker" && attackerTargets) {
+        const attackerDiv = document.createElement("div");
+        attackerDiv.style.padding = "4px";
+        attackerDiv.style.cursor = "pointer";
+        attackerDiv.style.marginBottom = "4px";
+        attackerDiv.style.borderBottom = "1px solid #555";
+        attackerDiv.style.color = "#eaeaea";
+        attackerDiv.onmouseover = () => { attackerDiv.style.background = "#3d3d3d"; };
+        attackerDiv.onmouseout = () => { attackerDiv.style.background = "transparent"; };
+        
+        const attackerRoleSpan = document.createElement("span");
+        attackerRoleSpan.textContent = role.toUpperCase() + ": ";
+        attackerRoleSpan.style.color = role === "sender" ? "#4a9eff" : (role === "receiver" ? "#4caf50" : "#ff6b6b");
+        attackerRoleSpan.style.fontWeight = "bold";
+        
+        const attackerIpSpan = document.createElement("span");
+        attackerIpSpan.textContent = ip + ":" + port;
+        attackerIpSpan.style.color = "#eaeaea";
+        
+        attackerDiv.appendChild(attackerRoleSpan);
+        attackerDiv.appendChild(attackerIpSpan);
+        
+        attackerDiv.onclick = () => {
+          if (role === "sender") {
+            document.getElementById("attacker-sender-ip").value = ip;
+            logLine(`Selected sender target: ${ip}:${port}`, "success");
+          } else if (role === "receiver") {
+            document.getElementById("attacker-receiver-ip").value = ip;
+            logLine(`Selected receiver target: ${ip}:${port}`, "success");
+          }
+        };
+        
+        attackerTargets.appendChild(attackerDiv);
+      }
     } else {
       // Fallback for unexpected format
       const div = document.createElement("div");
@@ -499,6 +557,326 @@ discoverBtn.onclick = () => {
 };
 
 
+// Function to update security configuration when settings change
+function updateSecurityConfig() {
+  if (!currentRole || !ws || ws.readyState !== WebSocket.OPEN) {
+    return; // Only update if role is set and websocket is open
+  }
+  
+  ensureWs();
+  
+  const targetIp = document.getElementById("target-ip").value.trim();
+  const port = parseInt(document.getElementById("target-port").value, 10) || 12347;
+  const transport = document.getElementById("transport").value;
+  const attackMode = document.getElementById("attack-mode").value;
+  const dropRate = parseInt(document.getElementById("drop-rate").value, 10) || 0;
+  const delayMs = parseInt(document.getElementById("delay-ms").value, 10) || 0;
+  const modifyText = document.getElementById("modify-text").value.trim();
+  
+  // Get config based on role
+  let config = {
+    targetIp,
+    port,
+    transport,
+    attackMode,
+    dropRate,
+    delayMs,
+    modifyText
+  };
+  
+  if (currentRole === "sender") {
+    const encModeStr = document.getElementById("enc-mode").value;
+    const encMode = parseInt(encModeStr, 10);
+    if (isNaN(encMode) || encMode < 0 || encMode > 3) {
+      return; // Invalid mode, don't send update
+    }
+    const kxMode = document.getElementById("kx-mode").value;
+    const psk = document.getElementById("psk-input").value;
+    const demo = document.getElementById("demo-mode").checked;
+    config.encMode = encMode;
+    config.kxMode = kxMode;
+    config.psk = psk;
+    config.demo = demo;
+  } else if (currentRole === "receiver") {
+    const decryptionModeStr = document.getElementById("receiver-decrypt-mode").value;
+    const decryptionMode = parseInt(decryptionModeStr, 10);
+    if (isNaN(decryptionMode) || decryptionMode < 0 || decryptionMode > 3) {
+      return; // Invalid mode, don't send update
+    }
+    const kxMode = document.getElementById("receiver-kx-mode").value;
+    const psk = document.getElementById("receiver-psk-input").value;
+    const demo = document.getElementById("receiver-demo-mode").checked;
+    config.encMode = decryptionMode;
+    config.kxMode = kxMode;
+    config.psk = psk;
+    config.demo = demo;
+  }
+  
+  // Send update to server
+  ws.send(
+    JSON.stringify({
+      type: "updateSecurityConfig",
+      role: currentRole,
+      config
+    })
+  );
+}
+
+// Add event listeners to security settings inputs
+function setupSecurityListeners() {
+  // Sender security settings
+  const senderEncMode = document.getElementById("enc-mode");
+  const senderKxMode = document.getElementById("kx-mode");
+  const senderPsk = document.getElementById("psk-input");
+  const senderDemo = document.getElementById("demo-mode");
+  
+  if (senderEncMode) {
+    senderEncMode.addEventListener("change", () => {
+      if (currentRole === "sender") {
+        updateSecurityConfig();
+        logLine(`Encryption mode changed to: ${senderEncMode.value}`, "role-selected");
+      }
+    });
+  }
+  
+  if (senderKxMode) {
+    senderKxMode.addEventListener("change", () => {
+      if (currentRole === "sender") {
+        updateSecurityConfig();
+        logLine(`Key exchange mode changed to: ${senderKxMode.value}`, "role-selected");
+      }
+    });
+  }
+  
+  if (senderPsk) {
+    senderPsk.addEventListener("input", () => {
+      if (currentRole === "sender") {
+        // Debounce PSK updates to avoid too many messages
+        clearTimeout(senderPsk.updateTimeout);
+        senderPsk.updateTimeout = setTimeout(() => {
+          updateSecurityConfig();
+        }, 500);
+      }
+    });
+  }
+  
+  if (senderDemo) {
+    senderDemo.addEventListener("change", () => {
+      if (currentRole === "sender") {
+        updateSecurityConfig();
+      }
+    });
+  }
+  
+  // Receiver security settings
+  const receiverDecryptMode = document.getElementById("receiver-decrypt-mode");
+  const receiverKxMode = document.getElementById("receiver-kx-mode");
+  const receiverPsk = document.getElementById("receiver-psk-input");
+  const receiverDemo = document.getElementById("receiver-demo-mode");
+  
+  if (receiverDecryptMode) {
+    receiverDecryptMode.addEventListener("change", () => {
+      if (currentRole === "receiver") {
+        updateSecurityConfig();
+        logLine(`Decryption mode changed to: ${receiverDecryptMode.value}`, "role-selected");
+      }
+    });
+  }
+  
+  if (receiverKxMode) {
+    receiverKxMode.addEventListener("change", () => {
+      if (currentRole === "receiver") {
+        updateSecurityConfig();
+        logLine(`Key exchange mode changed to: ${receiverKxMode.value}`, "role-selected");
+      }
+    });
+  }
+  
+  if (receiverPsk) {
+    receiverPsk.addEventListener("input", () => {
+      if (currentRole === "receiver") {
+        // Debounce PSK updates to avoid too many messages
+        clearTimeout(receiverPsk.updateTimeout);
+        receiverPsk.updateTimeout = setTimeout(() => {
+          updateSecurityConfig();
+        }, 500);
+      }
+    });
+  }
+  
+  if (receiverDemo) {
+    receiverDemo.addEventListener("change", () => {
+      if (currentRole === "receiver") {
+        updateSecurityConfig();
+      }
+    });
+  }
+}
+
 initInfo();
+// Function to add attack log entry
+function addAttackLog(message, level = "info") {
+  const attackLogContent = document.getElementById("attack-log-content");
+  if (!attackLogContent) return;
+  
+  const entry = document.createElement("div");
+  entry.style.marginBottom = "4px";
+  entry.style.padding = "4px";
+  entry.style.borderLeft = "3px solid";
+  
+  if (level === "success") {
+    entry.style.borderLeftColor = "#4caf50";
+    entry.style.color = "#4caf50";
+  } else if (level === "failed") {
+    entry.style.borderLeftColor = "#f44336";
+    entry.style.color = "#f44336";
+  } else if (level === "warning") {
+    entry.style.borderLeftColor = "#ff9800";
+    entry.style.color = "#ff9800";
+  } else {
+    entry.style.borderLeftColor = "#9e9e9e";
+    entry.style.color = "#9e9e9e";
+  }
+  
+  const timestamp = new Date().toLocaleTimeString();
+  entry.textContent = `[${timestamp}] ${message}`;
+  attackLogContent.appendChild(entry);
+  attackLogContent.scrollTop = attackLogContent.scrollHeight;
+}
+
+// Function to setup attack mode options visibility
+function setupAttackModeOptions() {
+  const attackModeSelect = document.getElementById("attack-mode");
+  if (!attackModeSelect) return;
+  
+  function updateAttackOptions() {
+    const mode = attackModeSelect.value;
+    // Hide all options
+    document.querySelectorAll(".attack-options").forEach(el => {
+      el.style.display = "none";
+    });
+    // Show relevant options
+    const relevantOptions = document.getElementById(`attack-options-${mode}`);
+    if (relevantOptions) {
+      relevantOptions.style.display = "block";
+    }
+    
+    // Update attack config if role is attacker and attack is active
+    if (currentRole === "attacker" && ws && ws.readyState === WebSocket.OPEN) {
+      updateAttackConfig();
+    }
+  }
+  
+  attackModeSelect.addEventListener("change", updateAttackOptions);
+  updateAttackOptions(); // Initial update
+  
+  // Also listen to changes in attack option inputs
+  const dropRateInput = document.getElementById("drop-rate");
+  const delayMsInput = document.getElementById("delay-ms");
+  const modifyTextInput = document.getElementById("modify-text");
+  
+  if (dropRateInput) {
+    dropRateInput.addEventListener("input", () => {
+      if (currentRole === "attacker") updateAttackConfig();
+    });
+  }
+  if (delayMsInput) {
+    delayMsInput.addEventListener("input", () => {
+      if (currentRole === "attacker") updateAttackConfig();
+    });
+  }
+  if (modifyTextInput) {
+    modifyTextInput.addEventListener("input", () => {
+      if (currentRole === "attacker") {
+        clearTimeout(modifyTextInput.updateTimeout);
+        modifyTextInput.updateTimeout = setTimeout(() => {
+          updateAttackConfig();
+        }, 500);
+      }
+    });
+  }
+}
+
+// Function to update attack configuration
+function updateAttackConfig() {
+  if (currentRole !== "attacker" || !ws || ws.readyState !== WebSocket.OPEN) {
+    return;
+  }
+  
+  ensureWs();
+  
+  const attackMode = document.getElementById("attack-mode").value;
+  const dropRate = parseInt(document.getElementById("drop-rate").value, 10) || 0;
+  const delayMs = parseInt(document.getElementById("delay-ms").value, 10) || 0;
+  const modifyText = document.getElementById("modify-text").value.trim() || "[MITM modified]";
+  
+  ws.send(JSON.stringify({
+    type: "updateAttackConfig",
+    config: {
+      attackMode,
+      dropRate,
+      delayMs,
+      modifyText
+    }
+  }));
+}
+
+// Function to handle start attack button
+function setupStartAttackButton() {
+  const startAttackBtn = document.getElementById("start-attack-btn");
+  if (!startAttackBtn) return;
+  
+  startAttackBtn.onclick = () => {
+    ensureWs();
+    
+    if (currentRole !== "attacker") {
+      logLine("Only attacker role can start attacks", "error");
+      return;
+    }
+    
+    const senderIp = document.getElementById("attacker-sender-ip").value.trim();
+    const receiverIp = document.getElementById("attacker-receiver-ip").value.trim();
+    const port = parseInt(document.getElementById("target-port").value, 10) || 12347;
+    const attackMode = document.getElementById("attack-mode").value;
+    const dropRate = parseInt(document.getElementById("drop-rate").value, 10) || 0;
+    const delayMs = parseInt(document.getElementById("delay-ms").value, 10) || 0;
+    const modifyText = document.getElementById("modify-text").value.trim() || "[MITM modified]";
+    
+    if (!senderIp && !receiverIp) {
+      logLine("Please select at least one target (sender or receiver)", "error");
+      addAttackLog("Error: No targets selected", "failed");
+      return;
+    }
+    
+    logLine(`Starting attack: mode=${attackMode}`, "role-selected");
+    addAttackLog(`Starting attack: ${attackMode}`, "info");
+    
+    ws.send(JSON.stringify({
+      type: "startAttack",
+      config: {
+        senderIp,
+        receiverIp,
+        port,
+        attackMode,
+        dropRate,
+        delayMs,
+        modifyText
+      }
+    }));
+  };
+}
+
+// Setup security listeners after DOM is ready
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => {
+    setupSecurityListeners();
+    setupAttackModeOptions();
+    setupStartAttackButton();
+  });
+} else {
+  setupSecurityListeners();
+  setupAttackModeOptions();
+  setupStartAttackButton();
+}
 
 

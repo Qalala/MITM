@@ -36,6 +36,7 @@ function createSender(config, ws) {
   let sessionKey = null;
   let sharedSecret = null;
   let seqOut = 0;
+  let negotiatedEncMode = null; // The encryption mode negotiated during handshake
   
   // Store config for later connection
   let storedConfig = { targetIp, port, transport, encMode, kxMode, psk, demo };
@@ -209,12 +210,13 @@ function createSender(config, ws) {
       socket = null;
     }
     
-    // Reset state for new connection
-    handshakeDone = false;
-    sessionKey = null;
-    sharedSecret = null;
-    seqOut = 0;
-    running = true;
+      // Reset state for new connection
+      handshakeDone = false;
+      sessionKey = null;
+      sharedSecret = null;
+      seqOut = 0;
+      negotiatedEncMode = null;
+      running = true;
     
     if (connectTransport === "udp-broadcast") {
       logUi(
@@ -279,6 +281,8 @@ function createSender(config, ws) {
         throw new Error("Expected ACK after key exchange");
       }
       
+      // Store the negotiated encryption mode for this connection
+      negotiatedEncMode = connectEncMode;
       handshakeDone = true;
       logUi(ws, "sender", "Handshake complete, ready to send data");
       
@@ -317,6 +321,7 @@ function createSender(config, ws) {
       sessionKey = null;
       sharedSecret = null;
       seqOut = 0;
+      negotiatedEncMode = null;
       // Close socket if it exists, but don't destroy the entire sender instance
       if (socket) {
         try {
@@ -328,12 +333,47 @@ function createSender(config, ws) {
     }
   }
 
+  function updateSecurityConfig(newConfig) {
+    // Update security-related config without requiring reconnect
+    if (newConfig.encMode !== undefined && newConfig.encMode !== null) {
+      const newEncMode = Number(newConfig.encMode);
+      if (newEncMode >= 0 && newEncMode <= 3) {
+        encMode = newEncMode;
+        logUi(ws, "sender", `Security config updated: encryption mode changed to ${encMode}`);
+      }
+    }
+    if (newConfig.kxMode) {
+      kxMode = newConfig.kxMode;
+      logUi(ws, "sender", `Security config updated: key exchange mode changed to ${kxMode}`);
+    }
+    if (newConfig.psk !== undefined) {
+      psk = newConfig.psk ? Buffer.from(newConfig.psk) : null;
+      logUi(ws, "sender", `Security config updated: PSK ${psk ? "updated" : "cleared"}`);
+    }
+    if (newConfig.demo !== undefined) {
+      demo = !!newConfig.demo;
+      logUi(ws, "sender", `Security config updated: demo mode ${demo ? "enabled" : "disabled"}`);
+    }
+    
+    // Update stored config
+    storedConfig = { ...storedConfig, encMode, kxMode, psk, demo };
+    
+    // If there's an active connection, warn that new settings will apply on next connection
+    if (socket && handshakeDone) {
+      logUi(ws, "sender", "⚠ Security settings updated. Current connection will continue with old settings. New settings will apply on next connection.");
+      sendUi(ws, { type: "log", message: "⚠ Security settings updated. Current connection uses old settings. Reconnect to apply new settings." });
+    }
+  }
+
   return {
     async stop() {
       cleanup();
     },
     async connect(cfg) {
       await connect(cfg);
+    },
+    async updateSecurityConfig(newConfig) {
+      updateSecurityConfig(newConfig);
     },
     async sendMessage(text) {
       // Check current transport from stored config
@@ -387,7 +427,9 @@ function createSender(config, ws) {
       }
       
       try {
-        const payload = buildDataPayload(text, currentEncMode);
+        // Use negotiated encryption mode if available (for active connection), otherwise use current config
+        const activeEncMode = negotiatedEncMode !== null ? negotiatedEncMode : currentEncMode;
+        const payload = buildDataPayload(text, activeEncMode);
         socket.write(encodeFrame(FRAME_TYPES.DATA, payload));
         logUi(ws, "sender", `SENT: ${text}`);
         sendUi(ws, { type: "messageSent", text });

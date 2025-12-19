@@ -323,12 +323,51 @@ function createReceiver(config, ws) {
     logUi(ws, "receiver", "Receiver stopped and sockets closed");
   }
 
+  function updateSecurityConfig(newConfig) {
+    // Update security-related config
+    // Note: For receiver, changing security settings while listening may affect new connections
+    const oldEncMode = encMode;
+    const oldKxMode = kxMode;
+    
+    if (newConfig.encMode !== undefined && newConfig.encMode !== null) {
+      const newEncMode = Number(newConfig.encMode);
+      if (newEncMode >= 0 && newEncMode <= 3) {
+        encMode = newEncMode;
+        logUi(ws, "receiver", `Security config updated: decryption mode changed from ${oldEncMode} to ${encMode}`);
+      }
+    }
+    if (newConfig.kxMode) {
+      kxMode = newConfig.kxMode;
+      logUi(ws, "receiver", `Security config updated: key exchange mode changed from ${oldKxMode} to ${kxMode}`);
+    }
+    if (newConfig.psk !== undefined) {
+      psk = newConfig.psk ? Buffer.from(newConfig.psk) : null;
+      logUi(ws, "receiver", `Security config updated: PSK ${psk ? "updated" : "cleared"}`);
+    }
+    if (newConfig.demo !== undefined) {
+      demo = !!newConfig.demo;
+      logUi(ws, "receiver", `Security config updated: demo mode ${demo ? "enabled" : "disabled"}`);
+    }
+    
+    // If there's an active connection, warn that new settings will apply to new connections
+    if (conn && handshakeDone) {
+      logUi(ws, "receiver", "⚠ Security settings updated. Current connection will continue with old settings. New connections will use new settings.");
+      sendUi(ws, { type: "log", message: "⚠ Security settings updated. Current connection uses old settings. New connections will use new settings." });
+    } else if (server) {
+      logUi(ws, "receiver", "⚠ Security settings updated. New connections will use the updated settings.");
+      sendUi(ws, { type: "log", message: "⚠ Security settings updated. New connections will use the updated settings." });
+    }
+  }
+
   return {
     async stop() {
       cleanup();
     },
     async sendMessage() {
       // Receiver does not send chat messages in this demo.
+    },
+    async updateSecurityConfig(newConfig) {
+      updateSecurityConfig(newConfig);
     },
     checkHandshake() {
       // For plaintext mode, handshake is complete if connection exists and handshakeDone is true

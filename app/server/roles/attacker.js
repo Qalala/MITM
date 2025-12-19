@@ -6,22 +6,54 @@ const {
   decodeFrames,
   FRAME_TYPES
 } = require("./common");
+const { ENC_MODES } = require("../../../core/protocol/constants");
 
 function createAttacker(config, ws) {
   const listenIp = "0.0.0.0";
   const listenPort = config.port || 12347;
-  const targetIp = config.targetIp || "127.0.0.1";
-  const targetPort = config.port || 12347;
-  const mode = config.attackMode || "passive";
-  const dropRate = Number(config.dropRate || 0);
-  const delayMs = Number(config.delayMs || 0);
-  const modifyText = (config.modifyText && config.modifyText.trim()) || "[MITM modified]";
+  let targetIp = config.targetIp || "127.0.0.1";
+  let targetPort = config.port || 12347;
+  let mode = config.attackMode || "passive";
+  let dropRate = Number(config.dropRate || 0);
+  let delayMs = Number(config.delayMs || 0);
+  let modifyText = (config.modifyText && config.modifyText.trim()) || "[MITM modified]";
+  
+  // New: Support for attacking both ends
+  let senderIp = config.senderIp || null;
+  let receiverIp = config.receiverIp || null;
+  let attackActive = false;
 
   let server = null;
   let clientConn = null;
   let serverConn = null;
   let running = true;
   let lastFrameFromSender = null;
+  let lastFrameFromReceiver = null;
+  let negotiatedEncMode = null; // Track encryption mode from handshake
+
+  // Attack log helper
+  function logAttack(message, level = "info") {
+    logUi(ws, "attacker", message);
+    sendUi(ws, { type: "attackLog", message, level });
+  }
+
+  // Extract plaintext from DATA frame if possible
+  function extractPlaintext(frame) {
+    if (frame.type !== FRAME_TYPES.DATA) {
+      return null;
+    }
+    
+    try {
+      const payloadStr = frame.payload.toString("utf8");
+      const obj = JSON.parse(payloadStr);
+      if (typeof obj.text === "string") {
+        return obj.text;
+      }
+    } catch (e) {
+      // Not plaintext JSON, likely encrypted
+    }
+    return null;
+  }
 
   (async () => {
     try {
@@ -48,7 +80,7 @@ function createAttacker(config, ws) {
         logUi(ws, "attacker", `Attacker listening on ${listenIp}:${listenPort}`);
         sendUi(ws, {
           type: "status",
-          status: `Attacker listening, forwarding to ${targetIp}:${targetPort}`
+          status: `Attacker listening on ${listenIp}:${listenPort}. Configure targets and click 'Start Attack' to begin.`
         });
       });
     } catch (e) {
@@ -72,9 +104,19 @@ function createAttacker(config, ws) {
       } catch {}
     }
     
-    if (!targetIp || targetIp === "127.0.0.1") {
-      logUi(ws, "attacker", "ERROR: Target IP not configured. Please set Target IP to receiver's IP address.");
-      sendUi(ws, { type: "error", error: "Target IP not configured. Please set Target IP in Network Setup." });
+    // Determine target based on configuration
+    let actualTargetIp = targetIp;
+    if (receiverIp) {
+      actualTargetIp = receiverIp; // If receiver IP is set, use it as target
+    } else if (senderIp && !receiverIp) {
+      // If only sender IP is set, we're intercepting sender -> receiver
+      // In this case, we need receiver IP from config or use default
+      actualTargetIp = targetIp;
+    }
+    
+    if (!actualTargetIp || actualTargetIp === "127.0.0.1") {
+      logUi(ws, "attacker", "ERROR: Target IP not configured. Please set Receiver IP in attacker controls.");
+      sendUi(ws, { type: "error", error: "Target IP not configured. Please set Receiver IP in Attacker Controls." });
       try {
         if (clientConn) {
           clientConn.end();
@@ -85,7 +127,7 @@ function createAttacker(config, ws) {
       return;
     }
     
-    logUi(ws, "attacker", `Sender connected to attacker, connecting to real receiver at ${targetIp}:${targetPort}`);
+    logAttack(`Sender connected to attacker, connecting to real receiver at ${actualTargetIp}:${targetPort}`, "info");
     serverConn = new net.Socket();
     
     try {
@@ -103,10 +145,10 @@ function createAttacker(config, ws) {
           serverConn.removeAllListeners("error");
           resolve();
         });
-        serverConn.connect(targetPort, targetIp);
+        serverConn.connect(targetPort, actualTargetIp);
       });
-      logUi(ws, "attacker", "Connected to real receiver, starting bidirectional relay");
-      sendUi(ws, { type: "status", status: `MITM active: sender <-> attacker <-> receiver (${targetIp}:${targetPort})` });
+      logAttack("Connected to real receiver, starting bidirectional relay", "info");
+      sendUi(ws, { type: "status", status: `MITM active: sender <-> attacker <-> receiver (${actualTargetIp}:${targetPort})` });
 
       relay(clientConn, serverConn, "sender->receiver").catch((e) =>
         logUi(ws, "attacker", `Relay error (s->r): ${e.message}`)
@@ -115,8 +157,8 @@ function createAttacker(config, ws) {
         logUi(ws, "attacker", `Relay error (r->s): ${e.message}`)
       );
     } catch (e) {
-      logUi(ws, "attacker", `Failed to connect to receiver at ${targetIp}:${targetPort}: ${e.message}`);
-      sendUi(ws, { type: "error", error: `Failed to connect to receiver: ${e.message}. Check that receiver is running and Target IP is correct.` });
+      logAttack(`Failed to connect to receiver at ${actualTargetIp}:${targetPort}: ${e.message}`, "failed");
+      sendUi(ws, { type: "error", error: `Failed to connect to receiver: ${e.message}. Check that receiver is running and Receiver IP is correct.` });
       try {
         if (clientConn) {
           clientConn.end();
@@ -136,27 +178,50 @@ function createAttacker(config, ws) {
     const fromSender = direction === "sender->receiver";
     const fromReceiver = direction === "receiver->sender";
     const frameIter = decodeFrames(src);
+    
     for await (const frame of frameIter) {
       if (!running) break;
+      
+      // Extract encryption mode from HELLO frame
+      if (frame.type === FRAME_TYPES.HELLO) {
+        try {
+          const hello = JSON.parse(frame.payload.toString("utf8"));
+          negotiatedEncMode = hello.encMode;
+          logAttack(`Detected encryption mode: ${negotiatedEncMode} (${negotiatedEncMode === ENC_MODES.PLAINTEXT ? "Plaintext" : "Encrypted"})`, "info");
+        } catch (e) {
+          // Ignore parse errors
+        }
+      }
+      
+      // For passive mode, try to extract and display plaintext
+      if (mode === "passive" && frame.type === FRAME_TYPES.DATA) {
+        const plaintext = extractPlaintext(frame);
+        if (plaintext !== null) {
+          logAttack(`[PASSIVE] Plaintext message: "${plaintext}"`, "success");
+        } else {
+          logAttack(`[PASSIVE] Encrypted message (cannot decrypt)`, "warning");
+        }
+      }
+      
       const rawHex = frame.payload.toString("hex");
-      const rawB64 = frame.payload.toString("base64");
       logUi(
         ws,
         "attacker",
-        `${direction} frame type=${frame.type} len=${frame.payload.length} raw-hex=${rawHex.slice(
-          0,
-          64
-        )}...`
+        `${direction} frame type=${frame.type} len=${frame.payload.length} raw-hex=${rawHex.slice(0, 64)}...`
       );
       
       // Detect attack failures from receiver responses
       if (fromReceiver && frame.type === FRAME_TYPES.ERROR) {
         try {
           const errorObj = JSON.parse(frame.payload.toString("utf8"));
-          if (errorObj.reason === "mode_mismatch" || errorObj.reason) {
-            sendUi(ws, { type: "attackFailed", message: `Attack failed: ${errorObj.reason || "receiver rejected"}` });
-          }
-        } catch {}
+          const reason = errorObj.reason || "unknown";
+          const message = errorObj.message || "receiver rejected";
+          logAttack(`Attack blocked: ${reason} - ${message}`, "failed");
+          sendUi(ws, { type: "attackFailed", message: `Attack failed: ${reason} - ${message}` });
+        } catch (e) {
+          logAttack(`Attack failed: receiver sent error frame`, "failed");
+          sendUi(ws, { type: "attackFailed", message: "Attack failed: receiver rejected connection" });
+        }
       }
 
       // Attack logic
@@ -170,44 +235,45 @@ function createAttacker(config, ws) {
         // Apply attack modes
         if (mode === "drop") {
           if (maybe(dropRate)) {
-            logUi(ws, "attacker", `Dropping frame per dropRate (${dropRate}%)`);
+            logAttack(`Dropping frame per dropRate (${dropRate}%)`, "warning");
             continue; // Don't forward this frame
           }
         }
         
         if (mode === "delay" && delayMs > 0) {
-          logUi(ws, "attacker", `Delaying frame by ${delayMs}ms`);
+          logAttack(`Delaying frame by ${delayMs}ms`, "info");
           await new Promise((r) => setTimeout(r, delayMs));
         }
         
         if (mode === "modify" && frame.type === FRAME_TYPES.DATA) {
           try {
-            const payloadStr = frame.payload.toString("utf8");
-            const obj = JSON.parse(payloadStr);
-            if (typeof obj.text === "string") {
+            const plaintext = extractPlaintext(frame);
+            if (plaintext !== null) {
               // This is plaintext - we can modify it
+              const obj = JSON.parse(frame.payload.toString("utf8"));
               obj.text = modifyText;
               const newPayload = Buffer.from(JSON.stringify(obj), "utf8");
               outFrame = { ...frame, payload: newPayload };
-              logUi(ws, "attacker", `Modified plaintext DATA frame: "${obj.text}"`);
+              logAttack(`Modified plaintext DATA frame: "${modifyText}"`, "success");
               sendUi(ws, { type: "attackSuccess", message: `Successfully modified plaintext message to: "${modifyText}"` });
             } else {
               // Encrypted payload - cannot modify
-              logUi(ws, "attacker", "Modify mode: frame is encrypted, cannot modify");
-              sendUi(ws, { type: "attackFailed", message: "Modify attack failed: message is encrypted (cannot modify ciphertext)" });
+              logAttack("Modify attack failed: message is encrypted (cannot modify ciphertext)", "failed");
+              sendUi(ws, { type: "attackFailed", message: "Modify attack failed: message is encrypted (cannot modify ciphertext without decryption key)" });
             }
           } catch (e) {
             // If we can't parse as JSON, it's likely encrypted
-            logUi(ws, "attacker", `Modify mode: failed to parse payload (likely encrypted): ${e.message}`);
+            logAttack(`Modify attack failed: cannot parse payload (likely encrypted): ${e.message}`, "failed");
             sendUi(ws, { type: "attackFailed", message: "Modify attack failed: cannot parse encrypted payload" });
           }
         }
         
         if (mode === "replay" && frame.type === FRAME_TYPES.DATA && lastFrameFromSender) {
           // Replay the last DATA frame instead of the current one
-          logUi(ws, "attacker", "Replaying last DATA frame");
+          logAttack("Replaying last DATA frame", "warning");
           outFrame = lastFrameFromSender;
           sendUi(ws, { type: "attackSuccess", message: "Replaying last DATA frame" });
+          // Note: This will likely fail if encryption mode has replay protection
         }
         
         if (mode === "downgrade" && frame.type === FRAME_TYPES.HELLO) {
@@ -217,11 +283,11 @@ function createAttacker(config, ws) {
             hello.encMode = 0; // force plaintext
             const newPayload = Buffer.from(JSON.stringify(hello), "utf8");
             outFrame = { ...frame, payload: newPayload };
-            logUi(ws, "attacker", `Attempted downgrade from mode ${originalMode} to plaintext (mode 0) in HELLO`);
+            logAttack(`Attempted downgrade from mode ${originalMode} to plaintext (mode 0) in HELLO`, "warning");
             sendUi(ws, { type: "attackSuccess", message: `Attempted downgrade attack: mode ${originalMode} -> 0` });
             // Note: We'll detect failure when receiver sends ERROR frame
           } catch (e) {
-            logUi(ws, "attacker", `Downgrade mode: failed to parse HELLO: ${e.message}`);
+            logAttack(`Downgrade attack failed: cannot parse HELLO: ${e.message}`, "failed");
             sendUi(ws, { type: "attackFailed", message: "Downgrade attack failed: cannot parse HELLO" });
           }
         }
@@ -237,8 +303,47 @@ function createAttacker(config, ws) {
     return Math.random() * 100 < percent;
   }
 
+  function updateAttackConfig(newConfig) {
+    if (newConfig.attackMode !== undefined) {
+      mode = newConfig.attackMode;
+      logAttack(`Attack mode updated to: ${mode}`, "info");
+    }
+    if (newConfig.dropRate !== undefined) {
+      dropRate = Number(newConfig.dropRate);
+    }
+    if (newConfig.delayMs !== undefined) {
+      delayMs = Number(newConfig.delayMs);
+    }
+    if (newConfig.modifyText !== undefined) {
+      modifyText = (newConfig.modifyText && newConfig.modifyText.trim()) || "[MITM modified]";
+    }
+  }
+
+  async function startAttack(attackConfig) {
+    attackActive = true;
+    senderIp = attackConfig.senderIp || null;
+    receiverIp = attackConfig.receiverIp || null;
+    targetIp = receiverIp || attackConfig.targetIp || targetIp;
+    
+    updateAttackConfig(attackConfig);
+    
+    logAttack(`Attack started: mode=${mode}, sender=${senderIp || "auto"}, receiver=${receiverIp || targetIp}`, "info");
+    sendUi(ws, { type: "status", status: `Attack active: ${mode} mode` });
+    
+    // If we have both sender and receiver IPs, we could potentially set up bidirectional interception
+    // For now, the attacker listens and intercepts when sender connects
+    if (!server) {
+      logAttack("Attacker server not ready. Please wait for server to start.", "warning");
+      return;
+    }
+    
+    logAttack("Attacker is ready. Waiting for sender to connect...", "info");
+    logAttack("Note: Sender should connect to attacker's IP (not receiver's IP) for MITM to work", "info");
+  }
+
   function cleanup() {
     running = false;
+    attackActive = false;
     try {
       if (clientConn) {
         clientConn.end();
@@ -262,7 +367,6 @@ function createAttacker(config, ws) {
     logUi(ws, "attacker", "Attacker stopped and sockets closed");
   }
 
-
   return {
     async stop() {
       cleanup();
@@ -270,11 +374,17 @@ function createAttacker(config, ws) {
     async sendMessage() {
       // Attacker does not send its own chat; it only relays.
     },
+    async startAttack(config) {
+      await startAttack(config);
+    },
+    async updateAttackConfig(newConfig) {
+      updateAttackConfig(newConfig);
+    },
     checkHandshake() {
       const isComplete = clientConn && serverConn;
       return {
         complete: isComplete,
-        status: isComplete ? "MITM relay active - connections established" : (clientConn || serverConn ? "Partial connection..." : "Waiting for connections...")
+        status: isComplete ? "MITM relay active - connections established" : (clientConn || serverConn ? "Partial connection..." : attackActive ? "Attack active, waiting for connections..." : "Attack not started")
       };
     }
   };
@@ -283,5 +393,3 @@ function createAttacker(config, ws) {
 module.exports = {
   createAttacker
 };
-
-
