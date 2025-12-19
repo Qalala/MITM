@@ -21,7 +21,8 @@ function createTcpServer(bindIp, port, onConnection) {
       onConnection(conn);
     });
     server.on("error", reject);
-    server.listen(port, bindIp, () => {
+    // listen(1) as per spec: backlog of 1 to enforce single connection semantics
+    server.listen(port, bindIp, 1, () => {
       resolve(server);
     });
   });

@@ -1,4 +1,6 @@
 const MAX_FRAME_SIZE = 1024 * 1024; // 1MB
+// Buffer size for receiving data chunks (referenced in requirements as buffer_size)
+const BUFFER_SIZE = 4096; // 4KB default receive buffer size
 
 // Frame types
 const FRAME_TYPES = {
@@ -54,6 +56,7 @@ async function* decodeFrames(socket) {
 
 module.exports = {
   MAX_FRAME_SIZE,
+  BUFFER_SIZE,
   FRAME_TYPES,
   encodeFrame,
   decodeFrames
