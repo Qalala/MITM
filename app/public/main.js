@@ -393,11 +393,8 @@ sendBtn.onclick = () => {
     return;
   }
   
-  if (!handshakeComplete) {
-    logLine("Handshake not complete. Please wait for connection...", "error");
-    return;
-  }
-  
+  // Send message - server will validate handshake status
+  // If handshake is not complete, server will return an error message
   ws.send(JSON.stringify({ type: "sendMessage", text }));
   chatInput.value = "";
 };
