@@ -168,9 +168,19 @@ function ensureWs() {
       } else if (msg.type === "attackLog") {
         addAttackLog(msg.message, msg.level || "info");
       } else if (msg.type === "messageSent") {
-        logLine(`→ SENT: ${msg.text}`, "message-sent");
+        if (msg.encrypted && msg.ciphertext) {
+          logLine(`→ SENT (ciphertext): ${msg.ciphertext}`, "message-sent");
+          logLine(`→ SENT (plaintext): ${msg.text}`, "message-sent");
+        } else {
+          logLine(`→ SENT: ${msg.text}`, "message-sent");
+        }
       } else if (msg.type === "messageReceived") {
-        logLine(`← RECEIVED: ${msg.text}`, "message-received");
+        if (msg.encrypted && msg.ciphertext) {
+          logLine(`← RECEIVED (ciphertext): ${msg.ciphertext}`, "message-received");
+          logLine(`← RECEIVED (plaintext): ${msg.text}`, "message-received");
+        } else {
+          logLine(`← RECEIVED: ${msg.text}`, "message-received");
+        }
       } else if (msg.type === "handshakeStatus") {
         // Update handshake status - this is the authoritative source
         const wasComplete = handshakeComplete;

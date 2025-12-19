@@ -89,8 +89,16 @@ function createSender(config, ws) {
   // Removed listenForFrames - now handled inline in connect() function
 
   function buildDataPayload(text, useEncMode = encMode) {
+    const { payload } = buildDataPayloadWithCiphertext(text, useEncMode);
+    return payload;
+  }
+
+  function buildDataPayloadWithCiphertext(text, useEncMode = encMode) {
     if (useEncMode === ENC_MODES.PLAINTEXT) {
-      return Buffer.from(JSON.stringify({ text }), "utf8");
+      return {
+        payload: Buffer.from(JSON.stringify({ text }), "utf8"),
+        ciphertextInfo: null
+      };
     }
 
     const seq = ++seqOut;
@@ -105,15 +113,22 @@ function createSender(config, ws) {
       const derivedKey = deriveKeyForAesGcm(key);
       const nonce = generateNonce();
       const { ciphertext, tag } = encryptGcm(derivedKey, nonce, pt, aad);
-      return Buffer.from(
-        JSON.stringify({
-          seq,
-          nonce: nonce.toString("base64"),
-          ciphertext: ciphertext.toString("base64"),
-          tag: tag.toString("base64")
-        }),
-        "utf8"
-      );
+      const ciphertextBase64 = ciphertext.toString("base64");
+      return {
+        payload: Buffer.from(
+          JSON.stringify({
+            seq,
+            nonce: nonce.toString("base64"),
+            ciphertext: ciphertextBase64,
+            tag: tag.toString("base64")
+          }),
+          "utf8"
+        ),
+        ciphertextInfo: {
+          ciphertext: ciphertextBase64.substring(0, 64) + (ciphertextBase64.length > 64 ? "..." : ""),
+          fullLength: ciphertextBase64.length
+        }
+      };
     }
 
     if (useEncMode === ENC_MODES.AES_CBC_HMAC) {
@@ -123,15 +138,22 @@ function createSender(config, ws) {
       const encKey = derivedKey.slice(0, 32);
       const macKey = derivedKey.slice(32, 64);
       const { ciphertext, mac } = encryptCbcHmac(encKey, macKey, iv, pt, aad);
-      return Buffer.from(
-        JSON.stringify({
-          seq,
-          iv: iv.toString("base64"),
-          ciphertext: ciphertext.toString("base64"),
-          mac: mac.toString("base64")
-        }),
-        "utf8"
-      );
+      const ciphertextBase64 = ciphertext.toString("base64");
+      return {
+        payload: Buffer.from(
+          JSON.stringify({
+            seq,
+            iv: iv.toString("base64"),
+            ciphertext: ciphertextBase64,
+            mac: mac.toString("base64")
+          }),
+          "utf8"
+        ),
+        ciphertextInfo: {
+          ciphertext: ciphertextBase64.substring(0, 64) + (ciphertextBase64.length > 64 ? "..." : ""),
+          fullLength: ciphertextBase64.length
+        }
+      };
     }
 
     if (useEncMode === ENC_MODES.DIFFIE_HELLMAN) {
@@ -143,18 +165,28 @@ function createSender(config, ws) {
       const derivedKey = deriveKeyForAesGcm(key);
       const nonce = generateNonce();
       const { ciphertext, tag } = encryptGcm(derivedKey, nonce, pt, aad);
-      return Buffer.from(
-        JSON.stringify({
-          seq,
-          nonce: nonce.toString("base64"),
-          ciphertext: ciphertext.toString("base64"),
-          tag: tag.toString("base64")
-        }),
-        "utf8"
-      );
+      const ciphertextBase64 = ciphertext.toString("base64");
+      return {
+        payload: Buffer.from(
+          JSON.stringify({
+            seq,
+            nonce: nonce.toString("base64"),
+            ciphertext: ciphertextBase64,
+            tag: tag.toString("base64")
+          }),
+          "utf8"
+        ),
+        ciphertextInfo: {
+          ciphertext: ciphertextBase64.substring(0, 64) + (ciphertextBase64.length > 64 ? "..." : ""),
+          fullLength: ciphertextBase64.length
+        }
+      };
     }
 
-    return Buffer.from(JSON.stringify({ text }), "utf8");
+    return {
+      payload: Buffer.from(JSON.stringify({ text }), "utf8"),
+      ciphertextInfo: null
+    };
   }
 
   function cleanup() {
@@ -483,10 +515,15 @@ function createSender(config, ws) {
       try {
         // Use negotiated encryption mode if available (for active connection), otherwise use current config
         const activeEncMode = negotiatedEncMode !== null ? negotiatedEncMode : currentEncMode;
-        const payload = buildDataPayload(text, activeEncMode);
+        const { payload, ciphertextInfo } = buildDataPayloadWithCiphertext(text, activeEncMode);
         socket.write(encodeFrame(FRAME_TYPES.DATA, payload));
         logUi(ws, "sender", `SENT: ${text}`);
-        sendUi(ws, { type: "messageSent", text });
+        sendUi(ws, { 
+          type: "messageSent", 
+          text,
+          ciphertext: ciphertextInfo ? ciphertextInfo.ciphertext : null,
+          encrypted: activeEncMode !== ENC_MODES.PLAINTEXT
+        });
       } catch (e) {
         logUi(ws, "sender", `Failed to send message: ${e.message}`);
         sendUi(ws, { type: "error", error: `Failed to send message: ${e.message}` });

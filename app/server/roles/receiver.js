@@ -231,7 +231,12 @@ function createReceiver(config, ws) {
       const text = obj.text || "";
       logUi(ws, "receiver", `RECV (plaintext): ${text}`);
       sendUi(ws, { type: "log", message: `RECV: ${text}` });
-      sendUi(ws, { type: "messageReceived", text });
+      sendUi(ws, { 
+        type: "messageReceived", 
+        text,
+        ciphertext: null,
+        encrypted: false
+      });
       // Check if message appears to be modified (contains MITM indicators)
       if (text.includes("[MITM modified]") || text.includes("HACKED") || text.toLowerCase().includes("mitm")) {
         sendUi(ws, { type: "attackSuccess", message: `Message was modified by attacker: "${text}"` });
@@ -260,9 +265,15 @@ function createReceiver(config, ws) {
         const plaintext = decryptGcm(derivedKey, nonce, ct, tag, aad);
         seqIn = obj.seq;
         const text = plaintext.toString("utf8");
+        const ciphertextBase64 = obj.ciphertext;
         logUi(ws, "receiver", `RECV (AES-GCM): ${text}`);
         sendUi(ws, { type: "log", message: `RECV: ${text}` });
-        sendUi(ws, { type: "messageReceived", text });
+        sendUi(ws, { 
+          type: "messageReceived", 
+          text,
+          ciphertext: ciphertextBase64.substring(0, 64) + (ciphertextBase64.length > 64 ? "..." : ""),
+          encrypted: true
+        });
       } catch (e) {
         logUi(ws, "receiver", `Integrity check failed (AES-GCM): ${e.message}`);
         sendUi(ws, { type: "attackFailed", message: `Integrity check failed - tampering detected (AES-GCM)` });
@@ -281,9 +292,15 @@ function createReceiver(config, ws) {
         const plaintext = decryptCbcHmac(encKey, macKey, iv, ct, mac, aad);
         seqIn = obj.seq;
         const text = plaintext.toString("utf8");
+        const ciphertextBase64 = obj.ciphertext;
         logUi(ws, "receiver", `RECV (AES-CBC+HMAC): ${text}`);
         sendUi(ws, { type: "log", message: `RECV: ${text}` });
-        sendUi(ws, { type: "messageReceived", text });
+        sendUi(ws, { 
+          type: "messageReceived", 
+          text,
+          ciphertext: ciphertextBase64.substring(0, 64) + (ciphertextBase64.length > 64 ? "..." : ""),
+          encrypted: true
+        });
       } catch (e) {
         logUi(ws, "receiver", `MAC verification failed (AES-CBC+HMAC): ${e.message}`);
         sendUi(ws, { type: "attackFailed", message: `MAC verification failed - tampering detected (AES-CBC+HMAC)` });
@@ -304,9 +321,15 @@ function createReceiver(config, ws) {
         const plaintext = decryptGcm(derivedKey, nonce, ct, tag, aad);
         seqIn = obj.seq;
         const text = plaintext.toString("utf8");
+        const ciphertextBase64 = obj.ciphertext;
         logUi(ws, "receiver", `RECV (Diffie-Hellman): ${text}`);
         sendUi(ws, { type: "log", message: `RECV: ${text}` });
-        sendUi(ws, { type: "messageReceived", text });
+        sendUi(ws, { 
+          type: "messageReceived", 
+          text,
+          ciphertext: ciphertextBase64.substring(0, 64) + (ciphertextBase64.length > 64 ? "..." : ""),
+          encrypted: true
+        });
       } catch (e) {
         logUi(ws, "receiver", `Integrity check failed (Diffie-Hellman): ${e.message}`);
         sendUi(ws, { type: "attackFailed", message: `Integrity check failed - tampering detected (Diffie-Hellman)` });

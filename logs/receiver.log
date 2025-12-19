@@ -11,3 +11,8 @@
 [2025-12-18T17:42:33.834Z] [receiver] Receiver listening on 0.0.0.0:12347 (TCP)
 [2025-12-18T17:42:38.468Z] [receiver] Client connected, starting handshake
 [2025-12-18T17:42:38.470Z] [receiver] Mode mismatch or downgrade attempt detected
+[2025-12-19T20:13:43.228Z] [receiver] Receiver configured with decryption mode: 0, KX mode: psk
+[2025-12-19T20:13:43.240Z] [receiver] Receiver listening on 0.0.0.0:12347 (TCP)
+[2025-12-19T20:13:45.137Z] [receiver] Receiver stopped and sockets closed
+[2025-12-19T20:13:45.137Z] [receiver] Receiver configured with decryption mode: 1, KX mode: psk
+[2025-12-19T20:13:45.139Z] [receiver] Receiver listening on 0.0.0.0:12347 (TCP)

@@ -1,3 +1,4 @@
+const { test } = require("node:test");
 const assert = require("assert");
 const { encodeFrame, MAX_FRAME_SIZE, FRAME_TYPES } = require("../core/protocol/framing");
 
