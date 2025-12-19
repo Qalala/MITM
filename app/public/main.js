@@ -161,6 +161,7 @@ function ensureWs() {
         handshakeComplete = msg.complete;
         if (msg.complete) {
           logLine(`✓ ${msg.status}`, "success");
+          logLine("✓ Handshake complete - connection established", "success");
           statusEl.textContent = msg.status;
         } else {
           // Only log if it's a meaningful status change
@@ -227,6 +228,7 @@ setRoleBtn.onclick = async () => {
     config.kxMode = kxMode;
     config.psk = psk;
     config.demo = demo;
+    logLine(`Sender configured: Encryption Mode=${encMode}, KX Mode=${kxMode}`, "role-selected");
   } else if (role === "receiver") {
     // Get decryption mode from dropdown
     const decryptionMode = parseInt(document.getElementById("receiver-decrypt-mode").value, 10);
@@ -237,6 +239,7 @@ setRoleBtn.onclick = async () => {
     config.kxMode = kxMode;
     config.psk = psk;
     config.demo = demo;
+    logLine(`Receiver configured: Decryption Mode=${decryptionMode}, KX Mode=${kxMode}`, "role-selected");
   }
 
   // Clear chat log when setting new role
@@ -289,6 +292,7 @@ connectBtn.onclick = () => {
   
   handshakeComplete = false;
   logLine(`Connecting to ${targetIp}:${port}...`, "role-selected");
+  logLine(`Using Encryption Mode=${encMode}, KX Mode=${kxMode}`, "role-selected");
   
   ws.send(
     JSON.stringify({

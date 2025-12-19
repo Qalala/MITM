@@ -54,3 +54,11 @@
 [2025-12-19T13:18:50.734Z] [sender] Connected to 192.168.1.10:12347, starting handshake
 [2025-12-19T13:18:50.741Z] [sender] Failed to connect: Expected NEGOTIATE frame
 [2025-12-19T13:18:50.742Z] [sender] Sender stopped and socket closed
+[2025-12-19T13:26:42.334Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T13:26:54.446Z] [sender] Failed to connect: Premature close
+[2025-12-19T13:26:54.447Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T13:27:11.994Z] [sender] Failed to connect: Premature close
+[2025-12-19T13:27:11.996Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T13:27:12.005Z] [sender] Failed to connect: Expected NEGOTIATE frame
+[2025-12-19T13:27:26.750Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T13:27:26.754Z] [sender] Failed to connect: Expected NEGOTIATE frame

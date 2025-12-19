@@ -23,6 +23,9 @@ function createSender(config, ws) {
   let encMode = Number(config.encMode || 0);
   let kxMode = config.kxMode || KX_MODES.PSK;
   let psk = config.psk ? Buffer.from(config.psk) : null;
+  
+  // Log the configured mode for debugging
+  logUi(ws, "sender", `Sender configured with encryption mode: ${encMode}, KX mode: ${kxMode}`);
 
   let socket = null;
   let running = true;
@@ -264,7 +267,8 @@ function createSender(config, ws) {
       }
       handshakeDone = true;
       logUi(ws, "sender", "Handshake complete, ready to send data");
-      sendUi(ws, { type: "status", status: "Handshake complete - encrypted" });
+      sendUi(ws, { type: "status", status: "Handshake complete - connection established" });
+      sendUi(ws, { type: "handshakeStatus", complete: true, status: "Handshake complete - connection established" });
       
       listenForFrames().catch((e) =>
         logUi(ws, "sender", `Background receive error: ${e.message}`)

@@ -24,6 +24,9 @@ function createReceiver(config, ws) {
   const encMode = Number(config.encMode || 0);
   const kxMode = config.kxMode || KX_MODES.PSK;
   const psk = config.psk ? Buffer.from(config.psk) : null;
+  
+  // Log the configured mode for debugging
+  logUi(ws, "receiver", `Receiver configured with decryption mode: ${encMode}, KX mode: ${kxMode}`);
 
   let server = null;
   let conn = null;
@@ -79,8 +82,11 @@ function createReceiver(config, ws) {
       const senderEncMode = helloPayload.encMode;
       const senderKxMode = helloPayload.kxMode;
       
+      logUi(ws, "receiver", `Received HELLO: sender encMode=${senderEncMode}, receiver expects encMode=${encMode}`);
+      
       if (senderEncMode !== encMode) {
         logUi(ws, "receiver", `Encryption mode mismatch: sender uses ${senderEncMode}, receiver expects ${encMode}`);
+        sendUi(ws, { type: "error", error: `Encryption mode mismatch: sender uses ${senderEncMode}, receiver expects ${encMode}` });
         const err = { reason: "mode_mismatch", message: `Encryption mode mismatch: sender uses ${senderEncMode}, receiver expects ${encMode}` };
         conn.write(encodeFrame(FRAME_TYPES.ERROR, Buffer.from(JSON.stringify(err))));
         conn.end();
@@ -136,7 +142,8 @@ function createReceiver(config, ws) {
       conn.write(encodeFrame(FRAME_TYPES.ACK, Buffer.from(JSON.stringify({ ok: true }))));
       handshakeDone = true; // Mark handshake as complete
       logUi(ws, "receiver", "Handshake complete, ready to receive data");
-      sendUi(ws, { type: "status", status: "Handshake complete - encrypted" });
+      sendUi(ws, { type: "status", status: "Handshake complete - connection established" });
+      sendUi(ws, { type: "handshakeStatus", complete: true, status: "Handshake complete - connection established" });
 
       // Streaming loop
       for await (const frame of frameIter) {
