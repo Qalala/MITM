@@ -455,8 +455,21 @@ function displayDiscoveryResults(results) {
         } catch (e) {
           // Ignore errors
         }
-        logLine(`Selected discovered device: ${role} at ${ip}:${port}`, "success");
-        logLine("Click 'Connect' button to connect to this device", "role-selected");
+        
+        const currentRole = roleSelect.value;
+        if (currentRole === "sender") {
+          logLine(`Selected discovered device: ${role} at ${ip}:${port}`, "success");
+          logLine("Click 'Connect' button to connect to this device", "role-selected");
+          logLine("⚠ Ensure your encryption mode matches the receiver's decryption mode", "role-selected");
+        } else if (currentRole === "receiver") {
+          logLine(`Receiver configured to accept connections from: ${role} at ${ip}:${port}`, "success");
+          logLine("Receiver is listening and ready to accept connections", "role-selected");
+          logLine("⚠ Ensure your decryption mode matches the sender's encryption mode", "role-selected");
+          // Update status to show receiver is ready
+          statusEl.textContent = `Receiver listening - will accept from ${ip}:${port}`;
+        } else {
+          logLine(`Selected discovered device: ${role} at ${ip}:${port}`, "success");
+        }
       };
       
       discoverResults.appendChild(div);

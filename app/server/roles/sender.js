@@ -83,18 +83,7 @@ function createSender(config, ws) {
     sendUi(ws, { type: "status", status: "Handshake complete - encrypted" });
   }
 
-  async function listenForFrames() {
-    const frameIter = decodeFrames(socket);
-    for await (const frame of frameIter) {
-      if (!running) break;
-      if (frame.type === FRAME_TYPES.ERROR) {
-        logUi(ws, "sender", `Error from receiver: ${frame.payload.toString("utf8")}`);
-      } else if (frame.type === FRAME_TYPES.DATA) {
-        logUi(ws, "sender", `DATA from receiver: ${frame.payload.toString("utf8")}`);
-      }
-    }
-    cleanup();
-  }
+  // Removed listenForFrames - now handled inline in connect() function
 
   function buildDataPayload(text, useEncMode = encMode) {
     if (useEncMode === ENC_MODES.PLAINTEXT) {
@@ -276,20 +265,41 @@ function createSender(config, ws) {
         sessionKey = connectPsk;
       }
 
+      // Wait for ACK from receiver
       const ack = await frameIter.next();
       if (ack.done || ack.value.type !== FRAME_TYPES.ACK) {
         throw new Error("Expected ACK after key exchange");
       }
+      
       handshakeDone = true;
       logUi(ws, "sender", "Handshake complete, ready to send data");
       
       // Send handshake status update - this is critical for client to know handshake is complete
-      sendUi(ws, { type: "handshakeStatus", complete: true, status: "Handshake complete - connection established" });
-      sendUi(ws, { type: "status", status: "Handshake complete - connection established" });
+      // Send handshakeStatus FIRST, then status
+      sendUi(ws, { type: "handshakeStatus", complete: true, status: "Handshake complete - ready to send" });
+      sendUi(ws, { type: "status", status: "Handshake complete - ready to send" });
       
-      listenForFrames().catch((e) =>
-        logUi(ws, "sender", `Background receive error: ${e.message}`)
-      );
+      // Start listening for incoming frames (DATA, ERROR, etc.) in the background
+      // Use the same frameIter to continue reading from the socket
+      (async () => {
+        try {
+          for await (const frame of frameIter) {
+            if (!running) break;
+            if (frame.type === FRAME_TYPES.DATA) {
+              logUi(ws, "sender", `DATA from receiver: ${frame.payload.toString("utf8")}`);
+            } else if (frame.type === FRAME_TYPES.ERROR) {
+              logUi(ws, "sender", `Error from receiver: ${frame.payload.toString("utf8")}`);
+            } else if (frame.type === FRAME_TYPES.CLOSE) {
+              logUi(ws, "sender", "Receiver closed connection");
+              break;
+            }
+          }
+        } catch (e) {
+          if (running) {
+            logUi(ws, "sender", `Background receive error: ${e.message}`);
+          }
+        }
+      })();
     } catch (e) {
       logUi(ws, "sender", `Failed to connect: ${e.message}`);
       sendUi(ws, { type: "error", error: e.message });

@@ -142,13 +142,17 @@ function createReceiver(config, ws) {
       conn.write(encodeFrame(FRAME_TYPES.KEY_EXCHANGE, kxPayload));
 
       // Sender response (if needed)
-      const kxResp = await frameIter.next();
+      // For PSK mode, sender doesn't send KEY_EXCHANGE response, so we skip waiting
       let respPayload = null;
-      if (!kxResp.done && kxResp.value.type === FRAME_TYPES.KEY_EXCHANGE) {
+      if (kxMode !== KX_MODES.PSK) {
+        // For RSA and DH modes, sender must send KEY_EXCHANGE response
+        const kxResp = await frameIter.next();
+        if (kxResp.done || kxResp.value.type !== FRAME_TYPES.KEY_EXCHANGE) {
+          throw new Error("Expected KEY_EXCHANGE response from sender");
+        }
         respPayload = kxResp.value.payload;
-      } else if (kxMode !== KX_MODES.PSK) {
-        throw new Error("Expected KEY_EXCHANGE response");
       }
+      // For PSK mode, respPayload remains null, which is correct
 
       const finalizeUpdate = receiverFinalizeKeyExchange(negotiatedEncMode, kxMode, respPayload, state);
       Object.assign(state, finalizeUpdate);
@@ -164,8 +168,8 @@ function createReceiver(config, ws) {
       conn.write(encodeFrame(FRAME_TYPES.ACK, Buffer.from(JSON.stringify({ ok: true }))));
       handshakeDone = true; // Mark handshake as complete
       logUi(ws, "receiver", "Handshake complete, ready to receive data");
-      sendUi(ws, { type: "status", status: "Handshake complete - connection established" });
-      sendUi(ws, { type: "handshakeStatus", complete: true, status: "Handshake complete - connection established" });
+      sendUi(ws, { type: "status", status: "Handshake complete - ready to receive" });
+      sendUi(ws, { type: "handshakeStatus", complete: true, status: "Handshake complete - ready to receive" });
 
       // Streaming loop
       for await (const frame of frameIter) {

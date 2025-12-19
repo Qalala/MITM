@@ -77,3 +77,16 @@
 [2025-12-19T14:11:10.270Z] [sender] Connecting with encryption mode: 0, KX mode: psk
 [2025-12-19T14:11:10.271Z] [sender] Failed to connect: Premature close
 [2025-12-19T14:11:10.273Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T14:15:05.695Z] [sender] Failed to connect: read ECONNRESET
+[2025-12-19T14:15:54.224Z] [sender] Sender configured with encryption mode: 0, KX mode: psk
+[2025-12-19T14:16:12.948Z] [sender] Updated encryption mode to 0 from connect config
+[2025-12-19T14:16:12.949Z] [sender] Connecting with encryption mode: 0, KX mode: psk
+[2025-12-19T14:16:14.952Z] [sender] Failed to connect: connect ECONNREFUSED 192.168.1.5:12347
+[2025-12-19T14:16:28.528Z] [sender] Updated encryption mode to 0 from connect config
+[2025-12-19T14:16:28.529Z] [sender] Connecting with encryption mode: 0, KX mode: psk
+[2025-12-19T14:16:28.532Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T14:17:23.591Z] [sender] Updated encryption mode to 0 from connect config
+[2025-12-19T14:17:23.591Z] [sender] Connecting with encryption mode: 0, KX mode: psk
+[2025-12-19T14:17:23.592Z] [sender] Failed to connect: Premature close
+[2025-12-19T14:17:23.594Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T14:19:56.885Z] [sender] Failed to connect: read ECONNRESET
