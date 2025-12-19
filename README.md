@@ -62,9 +62,9 @@ tests/
 
 ### Encryption modes
 
-The UI lets you select the mode; Receiver and Sender must **match**. Downgrade attacks are prevented by:
-- Including the selected mode in the HELLO and NEGOTIATE transcript and requiring an exact match.
-- Receiver will send `ERROR` and close if modes differ or are downgraded.
+The UI lets you select the mode for Sender. For Receiver, you select which decryption methods are supported via checkboxes. The Receiver will accept connections from Senders using any encryption mode that the Receiver supports. Downgrade attacks are prevented by:
+- Including the selected mode in the HELLO and NEGOTIATE transcript and requiring the mode to be in the Receiver's supported list.
+- Receiver will send `ERROR` and close if the Sender's mode is not in the Receiver's supported decryption methods.
 
 Supported modes:
 
@@ -163,9 +163,9 @@ These are prefilled in the UI. They should “just work” on a typical home/uni
 1. **Laptop 1 – Receiver**
    - Run `npm start`.
    - Visit `http://<laptop1-ip>:3000/` in a browser (or localhost).
-   - Choose **Role: Receiver**.
-   - Port: `12347`, Encryption: pick mode (e.g. 0 plaintext or 1 AES‑GCM).
-   - Click **Set Role**; status shows “Receiver listening”.
+   - Choose **Role: Receiver**, click **Set Role** (role selection disappears).
+   - Port: `12347`, Decryption Capabilities: check supported modes (e.g. Plaintext Mode 0 and/or AES‑GCM Mode 1).
+   - Status shows "Receiver listening".
 
 2. **Mobile – Attacker**
    - On Android: run `npm start` in Termux, then open `http://<android-ip>:3000/` in the mobile browser.
@@ -177,17 +177,18 @@ These are prefilled in the UI. They should “just work” on a typical home/uni
 3. **Laptop 2 – Sender**
    - Run `npm start` or reuse an existing instance.
    - Visit `http://<laptop2-ip>:3000/` in a browser.
-   - Choose **Role: Sender**.
+   - Choose **Role: Sender**, click **Set Role** (role selection disappears).
    - **Target IP**: `<android-ip>` (Attacker), Port: `12347`.
-   - Choose the same encryption mode and key exchange as Receiver.
-   - Click **Set Role** and then send messages from the chat input.
+   - Choose an encryption mode that Receiver supports and matching key exchange.
+   - Click **Connect** button and then send messages from the chat input.
 
 ### Mobile ↔ Laptop ↔ Laptop permutations
 
 - You can swap roles freely as long as:
-  - Sender’s **target IP** points either to Receiver (no MITM) or Attacker (for MITM).
-  - Receiver’s listen IP/port stay at `0.0.0.0:12347`.
-  - Encryption mode + key exchange configuration match between Sender and Receiver.
+  - Sender's **target IP** points either to Receiver (no MITM) or Attacker (for MITM).
+  - Receiver's listen IP/port stay at `0.0.0.0:12347`.
+  - Sender's encryption mode is one of the Receiver's supported decryption methods.
+  - Key exchange configuration matches between Sender and Receiver.
 
 ---
 
@@ -195,20 +196,20 @@ These are prefilled in the UI. They should “just work” on a typical home/uni
 
 ### 1. Plaintext with successful MITM read/modify
 
-1. Receiver: Mode 0 (Plaintext), PSK ignored.
-2. Attacker: Role Attacker, Mode **Modify**, set “Modify text” to something obvious (e.g. `HACKED`).
+1. Receiver: Decryption Capabilities includes Mode 0 (Plaintext), PSK ignored.
+2. Attacker: Role Attacker, Mode **Modify**, set "Modify text" to something obvious (e.g. `HACKED`).
 3. Sender: Mode 0 (Plaintext), connects to Attacker IP.
-4. Sender sends “hello world”.
+4. Sender sends "hello world".
 5. Observe:
    - Attacker log shows intercepted plaintext and modified frame.
    - Receiver sees altered message (e.g. `HACKED`).
 
 ### 2. AES‑GCM with integrity: MITM sees ciphertext, tampering fails
 
-1. Receiver: Mode 1 (AES‑GCM), Key exchange = PSK, PSK = `demo-psk`.
+1. Receiver: Decryption Capabilities includes Mode 1 (AES‑GCM), Key exchange = PSK, PSK = `demo-psk`.
 2. Attacker: Mode **Modify** or **Replay**, still positioned as MITM.
 3. Sender: Mode 1 (AES‑GCM), Key exchange = PSK, same PSK `demo-psk`, connect to Attacker IP.
-4. Sender sends “hello secure”.
+4. Sender sends "hello secure".
 5. Observe:
    - Attacker logs show only **ciphertext** (hex/base64) and cannot interpret the message.
    - If Attacker modifies or replays frames, Receiver detects integrity failure or replay and does not accept the tampered content.

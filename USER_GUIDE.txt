@@ -29,12 +29,16 @@ STEP 1: Start the Server
 
 STEP 2: Select Your Role
 -------------------------
-When the page loads, the role selection window will be displayed.
+When the page loads, ONLY the role selection window will be displayed (no other sections visible).
 
-After selecting a role and clicking "Set Role", only the relevant sections for that role will be displayed:
-- Sender: Role Selection, Network Setup, Security, Chat
-- Receiver: Role Selection, Network Setup, Security, Chat (read-only)
-- Attacker: Role Selection, Network Setup, Chat (read-only), Attacker Controls
+After selecting a role and clicking "Set Role":
+- The role selection section DISAPPEARS
+- Only the relevant sections for that role will be displayed:
+  - Sender: Network Setup, Security, Chat (with input)
+  - Receiver: Network Setup, Decryption Capabilities, Chat (read-only)
+  - Attacker: Network Setup, Chat (read-only), Attacker Controls
+
+IMPORTANT: Role selection is NOT restored from previous sessions. You must select a role every time you open the page (simulating different devices).
 
 ================================================================================
 2. ROLE SELECTION SECTION
@@ -54,7 +58,10 @@ Components:
   * Usage: After selecting role and configuring settings, click this button
   * Note: This will start/restart the role with your current settings
 
-IMPORTANT: On startup, only the role selection window is shown. Select a role and click "Set Role" to display role-specific components.
+IMPORTANT: 
+- On startup, ONLY the role selection window is shown (no other sections visible).
+- Select a role and click "Set Role" to hide the role selection and display role-specific components.
+- Role selection is NOT restored from localStorage - you must select a role every time (simulating different devices).
 
 ================================================================================
 3. SENDER ROLE - COMPLETE GUIDE
@@ -107,7 +114,7 @@ Components:
 
 B. SECURITY SECTION
 -------------------
-Location: Section "3. Security"
+Location: Section "3. Security" (only shown for Sender role)
 
 Components:
 -----------
@@ -132,8 +139,8 @@ Components:
     3 - Diffie-Hellman (demo)
       * Educational demo of DH key exchange
       * Use for: Learning about key exchange vulnerabilities
-  * Usage: Select mode that matches Receiver's setting
-  * Required: Must match Receiver exactly
+  * Usage: Select mode that Receiver supports (check Receiver's decryption capabilities)
+  * Required: Must be one of the modes the Receiver has selected in its decryption capabilities
 
 - Key Exchange Dropdown (#kx-mode)
   * Purpose: Select key exchange method
@@ -247,23 +254,50 @@ Same as Sender, but with different usage:
 - Auto Discover Button (#discover-btn)
   * Usage: Can use to find other devices, but not required
 
-B. SECURITY SECTION
--------------------
-Same components as Sender, but Receiver must match Sender's settings:
+B. DECRYPTION CAPABILITIES SECTION
+-----------------------------------
+Location: Section "3. Decryption Capabilities" (only shown for Receiver role)
 
-- Encryption Mode (#enc-mode)
-  * CRITICAL: Must match Sender's encryption mode exactly
-  * Usage: Select same mode as Sender selected
-  * Example: If Sender uses "1 - AES-GCM", Receiver must also use "1 - AES-GCM"
+Components:
+-----------
+- Decryption Method Checkboxes
+  * Purpose: Select which decryption methods this receiver supports
+  * Options (checkboxes):
+    - Plaintext (No encryption) - Mode 0
+      * Check this to accept plaintext messages from senders
+      * Use for: Testing, demonstrating MITM attacks
+    
+    - AES-GCM Decryption - Mode 1
+      * Check this to accept AES-GCM encrypted messages
+      * Use for: Secure communication (recommended)
+      * Features: Decrypts and verifies integrity of AES-GCM messages
+    
+    - AES-CBC + HMAC-SHA256 Decryption - Mode 2
+      * Check this to accept AES-CBC+HMAC encrypted messages
+      * Use for: Secure communication with encrypt-then-MAC
+      * Features: Decrypts and verifies MAC of AES-CBC+HMAC messages
+    
+    - Diffie-Hellman Decryption - Mode 3
+      * Check this to accept Diffie-Hellman encrypted messages
+      * Use for: Learning about DH key exchange
+  * Usage: Check all modes you want to support (can select multiple)
+  * Important: Receiver will accept connections from senders using ANY of the checked modes
+  * Example: If you check Mode 0 and Mode 1, receiver accepts both plaintext and AES-GCM senders
 
-- Key Exchange (#kx-mode)
+- Key Exchange (#receiver-kx-mode)
   * CRITICAL: Must match Sender's key exchange method
   * Usage: Select same method as Sender
+  * Options: Pre-shared key, RSA, Diffie-Hellman
 
-- Pre-shared Key (#psk-input)
+- Pre-shared Key (#receiver-psk-input)
   * CRITICAL: Must match Sender's PSK exactly
   * Usage: Enter exactly the same key as Sender
   * Example: If Sender uses "demo-psk", Receiver must also use "demo-psk"
+  * Required: Only when Key Exchange = "Pre-shared key"
+
+- Demo Mode (#receiver-demo-mode)
+  * Purpose: Enable verbose logging for educational purposes
+  * Usage: Check to see detailed step-by-step logs
 
 C. CHAT SECTION
 ---------------
@@ -284,17 +318,19 @@ C. CHAT SECTION
 WORKFLOW FOR RECEIVER:
 ----------------------
 1. Select "receiver" from role dropdown
-2. Note your Local IP address (share with Sender)
-3. Set Port (default 12347, share with Sender)
-4. Select Encryption Mode (must match Sender)
-5. Select Key Exchange (must match Sender)
-6. If using PSK, enter Pre-shared Key (must match Sender exactly)
-7. Click "Set Role" button
-8. Status shows "Receiver listening on 0.0.0.0:12347"
-9. Wait for Sender to connect
-10. Status changes to "Handshake complete - encrypted" when connected
-11. Received messages appear in chat log as "← RECEIVED: message"
-12. If attack detected, see "✗ ATTACK FAILED: reason" or "⚠ ATTACK SUCCESS: message"
+2. Click "Set Role" button (role selection disappears)
+3. Note your Local IP address (share with Sender)
+4. Set Port (default 12347, share with Sender)
+5. In Decryption Capabilities section:
+   - Check which decryption methods you want to support (can select multiple)
+   - Select Key Exchange (must match Sender)
+   - If using PSK, enter Pre-shared Key (must match Sender exactly)
+6. Status shows "Receiver listening on 0.0.0.0:12347"
+7. Wait for Sender to connect
+8. Receiver will accept connection if Sender's encryption mode is in your supported list
+9. Status changes to "Handshake complete - encrypted" when connected
+10. Received messages appear in chat log as "← RECEIVED: message"
+11. If attack detected, see "✗ ATTACK FAILED: reason" or "⚠ ATTACK SUCCESS: message"
 
 ================================================================================
 5. ATTACKER (MITM) ROLE - COMPLETE GUIDE
@@ -472,19 +508,20 @@ WORKFLOW 1: Basic Plaintext Chat (No Attacker)
 ------------------------------------------------
 1. Device A (Receiver):
    - Select "receiver"
+   - Click "Set Role" (role selection disappears)
    - Note IP address (e.g., 192.168.1.20)
-   - Encryption Mode = 0 (Plaintext)
+   - In Decryption Capabilities: Check "Plaintext (No encryption) - Mode 0"
    - Key Exchange = Pre-shared key
-   - Click "Set Role"
    - Wait for "Receiver listening"
 
 2. Device B (Sender):
    - Select "sender"
+   - Click "Set Role" (role selection disappears)
    - Target IP = 192.168.1.20 (Receiver's IP)
    - Port = 12347
    - Encryption Mode = 0 (Plaintext)
    - Key Exchange = Pre-shared key
-   - Click "Set Role"
+   - Click "Connect" button
    - Wait for "Handshake complete"
 
 3. Device B sends message:
@@ -499,19 +536,22 @@ WORKFLOW 2: Secure Encrypted Chat (AES-GCM)
 ---------------------------------------------
 1. Device A (Receiver):
    - Select "receiver"
+   - Click "Set Role" (role selection disappears)
    - Note IP address
-   - Encryption Mode = 1 (AES-GCM)
+   - In Decryption Capabilities: Check "AES-GCM Decryption - Mode 1"
    - Key Exchange = Pre-shared key
    - Pre-shared Key = "my-secret-key"
-   - Click "Set Role"
+   - Wait for "Receiver listening"
 
 2. Device B (Sender):
    - Select "sender"
+   - Click "Set Role" (role selection disappears)
    - Target IP = Receiver's IP
    - Encryption Mode = 1 (AES-GCM)
    - Key Exchange = Pre-shared key
    - Pre-shared Key = "my-secret-key" (MUST MATCH)
-   - Click "Set Role"
+   - Click "Connect" button
+   - Wait for "Handshake complete"
 
 3. Messages are encrypted and protected
 
@@ -645,25 +685,26 @@ QUICK REFERENCE
 
 SENDER CHECKLIST:
 □ Selected "sender" role
+□ Clicked "Set Role" (role selection disappears)
 □ Entered Receiver/Attacker IP in Target IP
 □ Set Port (default 12347)
-□ Selected Encryption Mode (matches Receiver)
+□ Selected Encryption Mode (must be supported by Receiver)
 □ Selected Key Exchange (matches Receiver)
 □ Entered Pre-shared Key if using PSK (matches Receiver)
-□ Clicked "Set Role"
+□ Clicked "Connect" button
 □ Waited for "Handshake complete"
 □ Typed message and clicked Send
 
 RECEIVER CHECKLIST:
 □ Selected "receiver" role
+□ Clicked "Set Role" (role selection disappears)
 □ Noted Local IP address
 □ Set Port (default 12347)
-□ Selected Encryption Mode (matches Sender)
+□ In Decryption Capabilities: Checked supported decryption methods
 □ Selected Key Exchange (matches Sender)
 □ Entered Pre-shared Key if using PSK (matches Sender)
-□ Clicked "Set Role"
 □ Waited for "Receiver listening"
-□ Waiting for Sender to connect
+□ Waiting for Sender to connect (Receiver accepts if Sender's mode is supported)
 
 ATTACKER CHECKLIST:
 □ Selected "attacker" role

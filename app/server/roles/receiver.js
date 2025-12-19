@@ -20,7 +20,8 @@ function createReceiver(config, ws) {
   const bindIp = "0.0.0.0";
   const port = config.port || 12347;
   const demo = !!config.demo;
-  const encMode = Number(config.encMode || 0);
+  // Receiver supports multiple decryption modes
+  const supportedDecryptionModes = config.supportedDecryptionModes || [0];
   const kxMode = config.kxMode || KX_MODES.PSK;
   const psk = config.psk ? Buffer.from(config.psk) : null;
 
@@ -31,6 +32,7 @@ function createReceiver(config, ws) {
   let sessionKey = null;
   let sharedSecret = null;
   let seqIn = 0;
+  let negotiatedEncMode = null; // The encryption mode negotiated with the sender
 
   (async () => {
     try {
@@ -64,20 +66,35 @@ function createReceiver(config, ws) {
     }
     const helloPayload = JSON.parse(hello.value.payload.toString("utf8"));
 
-    if (helloPayload.encMode !== encMode || helloPayload.kxMode !== kxMode) {
-      // Prevent downgrade: require exact match to configured mode.
-      logUi(ws, "receiver", "Mode mismatch or downgrade attempt detected");
-      const err = { reason: "mode_mismatch" };
+    // Check if sender's encryption mode is in our supported list
+    const senderEncMode = helloPayload.encMode;
+    const senderKxMode = helloPayload.kxMode;
+    
+    if (!supportedDecryptionModes.includes(senderEncMode)) {
+      logUi(ws, "receiver", `Unsupported encryption mode ${senderEncMode} from sender. Supported modes: ${supportedDecryptionModes.join(", ")}`);
+      const err = { reason: "mode_mismatch", message: `Receiver does not support encryption mode ${senderEncMode}` };
+      conn.write(encodeFrame(FRAME_TYPES.ERROR, Buffer.from(JSON.stringify(err))));
+      conn.end();
+      return;
+    }
+    
+    if (senderKxMode !== kxMode) {
+      logUi(ws, "receiver", "Key exchange mode mismatch");
+      const err = { reason: "mode_mismatch", message: `Key exchange mode mismatch: sender uses ${senderKxMode}, receiver uses ${kxMode}` };
       conn.write(encodeFrame(FRAME_TYPES.ERROR, Buffer.from(JSON.stringify(err))));
       conn.end();
       return;
     }
 
+    // Use the sender's encryption mode (which we support)
+    negotiatedEncMode = senderEncMode;
+    logUi(ws, "receiver", `Negotiated encryption mode: ${negotiatedEncMode}`);
+
     // NEGOTIATE: confirm mode
-    conn.write(encodeFrame(FRAME_TYPES.NEGOTIATE, buildNegotiate(encMode, kxMode)));
+    conn.write(encodeFrame(FRAME_TYPES.NEGOTIATE, buildNegotiate(negotiatedEncMode, kxMode)));
 
     // KEY_EXCHANGE from receiver
-    const { payload: kxPayload, stateUpdate } = receiverBuildKeyExchange(encMode, kxMode, {
+    const { payload: kxPayload, stateUpdate } = receiverBuildKeyExchange(negotiatedEncMode, kxMode, {
       psk
     });
     Object.assign(state, stateUpdate);
@@ -92,7 +109,7 @@ function createReceiver(config, ws) {
       throw new Error("Expected KEY_EXCHANGE response");
     }
 
-    const finalizeUpdate = receiverFinalizeKeyExchange(encMode, kxMode, respPayload, state);
+    const finalizeUpdate = receiverFinalizeKeyExchange(negotiatedEncMode, kxMode, respPayload, state);
     Object.assign(state, finalizeUpdate);
 
     sessionKey = state.sessionKey;
@@ -119,10 +136,10 @@ function createReceiver(config, ws) {
   }
 
   async function processDataFrame(payload) {
-    // payload is JSON structure depending on encMode.
+    // payload is JSON structure depending on negotiatedEncMode.
     const obj = JSON.parse(payload.toString("utf8"));
 
-    if (encMode === ENC_MODES.PLAINTEXT) {
+    if (negotiatedEncMode === ENC_MODES.PLAINTEXT) {
       seqIn++;
       const text = obj.text || "";
       logUi(ws, "receiver", `RECV (plaintext): ${text}`);
@@ -144,7 +161,7 @@ function createReceiver(config, ws) {
     const seqBuf = Buffer.alloc(8);
     seqBuf.writeBigUInt64BE(BigInt(obj.seq));
 
-    if (encMode === ENC_MODES.AES_GCM) {
+    if (negotiatedEncMode === ENC_MODES.AES_GCM) {
       try {
         const nonce = Buffer.from(obj.nonce, "base64");
         const ct = Buffer.from(obj.ciphertext, "base64");
@@ -160,7 +177,7 @@ function createReceiver(config, ws) {
         logUi(ws, "receiver", `Integrity check failed (AES-GCM): ${e.message}`);
         sendUi(ws, { type: "attackFailed", message: `Integrity check failed - tampering detected (AES-GCM)` });
       }
-    } else if (encMode === ENC_MODES.AES_CBC_HMAC) {
+    } else if (negotiatedEncMode === ENC_MODES.AES_CBC_HMAC) {
       try {
         const iv = Buffer.from(obj.iv, "base64");
         const ct = Buffer.from(obj.ciphertext, "base64");

@@ -114,23 +114,27 @@ The iOS device can now act as **Sender / Receiver / Attacker** via the browser U
 
 ## 2. Navigating the UI
 
-Open `http://<server-ip>:3000/` in a browser. The main sections are:
+Open `http://<server-ip>:3000/` in a browser. **On first launch, only the role selection is visible.** After selecting and setting a role, the role selection disappears and role-specific sections appear.
 
 - **Status bar (`#status`)**
-  - Shows connection to the local control server and current role state (e.g. “Receiver listening”, “Handshake complete – encrypted”).
+  - Shows connection to the local control server and current role state (e.g. "Receiver listening", "Handshake complete – encrypted").
+  - Hidden until a role is set.
 
-- **1. Choose Role**
+- **1. Choose Role** (visible only on startup)
   - `Role` dropdown (`#role-select`): **Sender**, **Receiver**, or **Attacker (MITM)**.
   - `Set Role` button (`#set-role-btn`): applies the selected role with the current configuration.
+  - **Important**: After clicking "Set Role", this section disappears and role-specific sections appear.
+  - **Note**: Role selection is not restored from previous sessions - you must select a role each time (simulating different devices).
 
-- **2. Network Setup**
-  - `Local IP` label (`#local-ip`): shows the device’s detected IP and default TCP port.
+- **2. Network Setup** (appears after setting role)
+  - `Local IP` label (`#local-ip`): shows the device's detected IP and default TCP port.
   - `Transport` (`#transport`): normally **TCP**. `UDP broadcast` is for the optional demo script.
   - `Target IP` (`#target-ip`): where the **Sender** or **Attacker** will connect (Receiver or Attacker IP).
   - `Port` (`#target-port`): defaults to **12347** and must match the Receiver/Attacker listening port.
-  - `Auto discover` (`#discover-btn`): broadcasts on the LAN and shows results in `#discover-results`.
+  - `Auto discover` (`#discover-btn`): broadcasts on the LAN and shows results in `#discover-results` (Sender only).
+  - `Refresh` (`#refresh-btn`): refreshes discovery (Sender) or checks handshake status (all roles).
 
-- **3. Security**
+- **3. Security** (appears for Sender after setting role)
   - `Encryption mode` (`#enc-mode`):
     - **0 – None (Plaintext)**
     - **1 – AES‑GCM**
@@ -143,11 +147,22 @@ Open `http://<server-ip>:3000/` in a browser. The main sections are:
   - `Pre‑shared key` (`#psk-input`): used when `psk` is chosen.
   - `Demo mode` (`#demo-mode`): enables more verbose logging/steps.
 
-- **4. Chat / Logs**
-  - `Chat log` (`#chat-log`): shows sent/received messages and logs.
-  - `Input` (`#chat-input`) + `Send` button (`#send-btn`): used by **Sender** to send messages.
+- **3. Decryption Capabilities** (appears for Receiver after setting role)
+  - Checkboxes to select which decryption methods the receiver supports:
+    - **Plaintext (No encryption) – Mode 0**
+    - **AES-GCM Decryption – Mode 1**
+    - **AES-CBC + HMAC-SHA256 Decryption – Mode 2**
+    - **Diffie-Hellman Decryption – Mode 3**
+  - The receiver will accept connections from senders using any of the selected encryption modes.
+  - `Key exchange` (`#receiver-kx-mode`): must match the sender's key exchange method.
+  - `Pre‑shared key` (`#receiver-psk-input`): must match the sender's PSK exactly.
+  - `Demo mode` (`#receiver-demo-mode`): enables more verbose logging/steps.
 
-- **Attacker Controls**
+- **4. Chat / Logs** (appears after setting role)
+  - `Chat log` (`#chat-log`): shows sent/received messages and logs.
+  - `Input` (`#chat-input`) + `Send` button (`#send-btn`): used by **Sender** to send messages (hidden for Receiver and Attacker).
+
+- **Attacker Controls** (appears for Attacker after setting role)
   - `Mode` (`#attack-mode`):
     - **Passive sniff/log**
     - **Modify plaintext**
@@ -159,8 +174,6 @@ Open `http://<server-ip>:3000/` in a browser. The main sections are:
   - `Delay (ms)` (`#delay-ms`): extra latency in **Delay** mode.
   - `Modify text` (`#modify-text`): replacement text in **Modify plaintext** mode.
 
-Configuration (IP, port, encryption, key exchange, PSK) is stored in `localStorage`, so it persists between reloads on the same device.
-
 ---
 
 ## 3. Test scenarios and step‑by‑step cases
@@ -168,8 +181,9 @@ Configuration (IP, port, encryption, key exchange, PSK) is stored in `localStora
 Below are concrete test scripts you can follow. In all scenarios:
 
 - **Receiver** listens on `0.0.0.0:12347` (default).
-- **Sender’s Target IP** points either directly to Receiver (no MITM) or to Attacker (for MITM).
-- **Encryption mode** and **Key exchange** must match between Sender and Receiver.
+- **Sender's Target IP** points either directly to Receiver (no MITM) or to Attacker (for MITM).
+- **Sender's Encryption mode** must be one of the **Receiver's supported decryption modes** (selected via checkboxes).
+- **Key exchange** must match between Sender and Receiver.
 
 ### 3.1. Plaintext chat without MITM (baseline)
 
@@ -177,18 +191,18 @@ Below are concrete test scripts you can follow. In all scenarios:
 
 1. **Receiver device**
    - Open `http://<receiver-ip>:3000/` in a browser.
-   - Section **1. Choose Role**: select **Receiver**, click **Set Role**.
+   - Section **1. Choose Role**: select **Receiver**, click **Set Role** (role selection will disappear).
    - Section **2. Network Setup**:
      - Ensure **Transport = TCP**.
      - Leave **Port = 12347**.
-   - Section **3. Security**:
-     - **Encryption mode = 0 – None (Plaintext)**.
+   - Section **3. Decryption Capabilities**:
+     - Check **Plaintext (No encryption) – Mode 0** (and any other modes you want to support).
      - **Key exchange = Pre‑shared key** (PSK is ignored in plaintext).
-   - Confirm status shows **“Receiver listening on 0.0.0.0:12347”**.
+   - Confirm status shows **"Receiver listening on 0.0.0.0:12347"**.
 
 2. **Sender device**
    - Open `http://<sender-ip>:3000/` in a browser.
-   - Role: **Sender**, click **Set Role**.
+   - Role: **Sender**, click **Set Role** (role selection will disappear).
    - Network:
      - **Target IP = <receiver-ip>**
      - **Port = 12347**
@@ -196,6 +210,7 @@ Below are concrete test scripts you can follow. In all scenarios:
    - Security:
      - **Encryption mode = 0 – None (Plaintext)**.
      - **Key exchange = Pre‑shared key**.
+   - Click **Connect** button (appears for Sender).
    - When status indicates handshake complete or ready, go to **4. Chat / Logs**.
    - Type `Hello plaintext` and click **Send**.
 
@@ -211,7 +226,7 @@ Below are concrete test scripts you can follow. In all scenarios:
 
 1. **Receiver (Laptop 1)**
    - As in 3.1, configure **Receiver**, **TCP**, **Port 12347**.
-   - **Encryption mode = 0 – None (Plaintext)**.
+   - **Decryption Capabilities**: Check **Plaintext (No encryption) – Mode 0**.
    - **Key exchange = Pre‑shared key**.
 
 2. **Attacker (Mobile or Laptop 2)**
@@ -248,8 +263,8 @@ Below are concrete test scripts you can follow. In all scenarios:
 
 1. **Receiver**
    - Role: **Receiver**, Port = `12347`, Transport = TCP.
-   - Security:
-     - **Encryption mode = 1 – AES‑GCM**.
+   - Decryption Capabilities:
+     - Check **AES-GCM Decryption – Mode 1** (and any other modes you want to support).
      - **Key exchange = Pre‑shared key**.
      - Set **PSK = demo-psk** (or another shared string, but use the same for Sender).
 
@@ -283,8 +298,8 @@ Below are concrete test scripts you can follow. In all scenarios:
 
 1. **Receiver**
    - Role: **Receiver**, Port = `12347`, Transport = TCP.
-   - Security:
-     - **Encryption mode = 2 – AES‑CBC + HMAC‑SHA256**.
+   - Decryption Capabilities:
+     - Check **AES-CBC + HMAC-SHA256 Decryption – Mode 2** (and any other modes you want to support).
      - **Key exchange = Pre‑shared key** (or RSA/DH if you prefer).
      - Set **PSK** to some value, e.g. `cbc-psk`.
 
@@ -317,11 +332,11 @@ Below are concrete test scripts you can follow. In all scenarios:
 1. **Unauthenticated DH setup**
    - Receiver:
      - Role: **Receiver**, Port `12347`, Transport TCP.
-     - Security:
-       - **Encryption mode = 3 – Diffie‑Hellman (demo)**.
+     - Decryption Capabilities:
+       - Check **Diffie-Hellman Decryption – Mode 3** (and any other modes you want to support).
        - **Key exchange = dh** (if used).
    - Sender:
-     - Role: **Sender**, Target IP = `<receiver-ip>`, same enc/kx as Receiver.
+     - Role: **Sender**, Target IP = `<receiver-ip>`, **Encryption mode = 3 – Diffie‑Hellman (demo)**, same kx as Receiver.
    - Optionally insert an **Attacker** in passive mode to log frames and reason about substituting DH keys.
 
 2. **Authenticated DH (concept)**

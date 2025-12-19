@@ -22,36 +22,7 @@ function logLine(text, className = "") {
   chatLog.scrollTop = chatLog.scrollHeight;
 }
 
-function updateDecryptionDisplay() {
-  const decryptionDisplay = document.getElementById("decryption-mode-display");
-  const decryptionMethodsList = document.getElementById("decryption-methods-list");
-  
-  if (currentRole !== "receiver") {
-    decryptionDisplay.style.display = "none";
-    return;
-  }
-  
-  decryptionDisplay.style.display = "block";
-  
-  // Define decryption methods and which encryption they decrypt
-  const decryptionMethods = [
-    { name: "Plaintext Decryption", decrypts: ["0 - None (Plaintext)"] },
-    { name: "AES-GCM Decryption", decrypts: ["1 - AES-GCM"] },
-    { name: "AES-CBC + HMAC-SHA256 Decryption", decrypts: ["2 - AES-CBC + HMAC-SHA256"] },
-    { name: "Diffie-Hellman Decryption", decrypts: ["3 - Diffie-Hellman (demo)"] }
-  ];
-  
-  decryptionMethodsList.innerHTML = "";
-  decryptionMethods.forEach(method => {
-    const div = document.createElement("div");
-    div.style.marginBottom = "4px";
-    div.style.padding = "4px";
-    div.style.background = "#3d3d3d";
-    div.style.borderRadius = "4px";
-    div.innerHTML = `<strong>${method.name}</strong> <span style="color: #9e9e9e;">(decrypts: ${method.decrypts.join(", ")})</span>`;
-    decryptionMethodsList.appendChild(div);
-  });
-}
+// Removed updateDecryptionDisplay - receiver now uses checkboxes in receiver-security-section
 
 function showRoleSections(role) {
   // Hide role selection section once role is set
@@ -60,6 +31,7 @@ function showRoleSections(role) {
   // Hide all role-specific sections first
   document.getElementById("network-section").style.display = "none";
   document.getElementById("security-section").style.display = "none";
+  document.getElementById("receiver-security-section").style.display = "none";
   document.getElementById("chat-section").style.display = "none";
   document.getElementById("attacker-section").style.display = "none";
   
@@ -70,17 +42,14 @@ function showRoleSections(role) {
     document.getElementById("chat-section").style.display = "block";
     // Show chat input for sender
     document.getElementById("chat-input-row").style.display = "flex";
-    document.getElementById("decryption-mode-display").style.display = "none";
     // Show Connect button for sender
     connectBtn.style.display = "inline-block";
   } else if (role === "receiver") {
     document.getElementById("network-section").style.display = "block";
-    document.getElementById("security-section").style.display = "block";
+    document.getElementById("receiver-security-section").style.display = "block";
     document.getElementById("chat-section").style.display = "block";
     // Hide chat input for receiver (read-only)
     document.getElementById("chat-input-row").style.display = "none";
-    // Show decryption mode display for receiver
-    updateDecryptionDisplay();
     // Hide Connect button for receiver (it listens, doesn't connect)
     connectBtn.style.display = "none";
   } else if (role === "attacker") {
@@ -91,7 +60,6 @@ function showRoleSections(role) {
     document.getElementById("attacker-section").style.display = "block";
     // Hide chat input for attacker (read-only)
     document.getElementById("chat-input-row").style.display = "none";
-    document.getElementById("decryption-mode-display").style.display = "none";
     // Hide Connect button for attacker
     connectBtn.style.display = "none";
   }
@@ -104,43 +72,31 @@ async function initInfo() {
     const res = await fetch("/api/info");
     const info = await res.json();
     localIpEl.textContent = info.localIp + ":" + info.defaultPort + " (TCP)";
-    const saved = JSON.parse(localStorage.getItem("lanSecureChatConfig") || "{}");
-    document.getElementById("target-port").value = saved.port || info.defaultPort;
-    document.getElementById("target-ip").value = saved.targetIp || "";
-    document.getElementById("enc-mode").value = saved.encMode ?? "0";
-    document.getElementById("kx-mode").value = saved.kxMode || "psk";
-    document.getElementById("psk-input").value = saved.psk || "";
-    document.getElementById("transport").value = saved.transport || "tcp";
     
-    // Set up encryption mode change listener for decryption display
-    document.getElementById("enc-mode").addEventListener("change", () => {
-      updateDecryptionDisplay();
-      // Also update role config if receiver is active
-      if (currentRole === "receiver") {
-        setRoleBtn.click();
-      }
-    });
+    // Set default values (no restoration from localStorage)
+    document.getElementById("target-port").value = info.defaultPort;
+    document.getElementById("target-ip").value = "";
+    document.getElementById("enc-mode").value = "0";
+    document.getElementById("kx-mode").value = "psk";
+    document.getElementById("psk-input").value = "";
+    document.getElementById("transport").value = "tcp";
+    
+    // Set default values for receiver
+    document.getElementById("receiver-kx-mode").value = "psk";
+    document.getElementById("receiver-psk-input").value = "";
+    document.getElementById("receiver-demo-mode").checked = false;
     
     // Hide all sections initially, show only role selection window
     document.getElementById("network-section").style.display = "none";
     document.getElementById("security-section").style.display = "none";
+    document.getElementById("receiver-security-section").style.display = "none";
     document.getElementById("chat-section").style.display = "none";
     document.getElementById("attacker-section").style.display = "none";
     
-    // Check if role was saved, otherwise show only role selection
-    if (saved.role && ["sender", "receiver", "attacker"].includes(saved.role)) {
-      roleSelect.value = saved.role;
-      currentRole = saved.role;
-      // Show status section when role is restored
-      statusEl.style.display = "block";
-      showRoleSections(currentRole);
-      logLine(`Restored role: ${currentRole}`, "role-selected");
-    } else {
-      // Show only role selection window on startup
-      document.getElementById("role-section").style.display = "block";
-      // Hide status initially when no role is set
-      statusEl.style.display = "none";
-    }
+    // Always show only role selection window on startup (no restoration)
+    document.getElementById("role-section").style.display = "block";
+    // Hide status initially when no role is set
+    statusEl.style.display = "none";
   } catch (e) {
     localIpEl.textContent = "Unknown";
   }
@@ -219,27 +175,63 @@ setRoleBtn.onclick = () => {
   // Hide role selection and show role-specific sections
   showRoleSections(role);
   
-  // Update decryption display when role changes
-  if (role === "receiver") {
-    updateDecryptionDisplay();
-  }
-  
   const targetIp = document.getElementById("target-ip").value.trim();
   const port = parseInt(document.getElementById("target-port").value, 10) || 12347;
   const transport = document.getElementById("transport").value;
-  const encMode = parseInt(document.getElementById("enc-mode").value, 10);
-  const kxMode = document.getElementById("kx-mode").value;
-  const psk = document.getElementById("psk-input").value;
-  const demo = document.getElementById("demo-mode").checked;
   const attackMode = document.getElementById("attack-mode").value;
   const dropRate = parseInt(document.getElementById("drop-rate").value, 10) || 0;
   const delayMs = parseInt(document.getElementById("delay-ms").value, 10) || 0;
   const modifyText = document.getElementById("modify-text").value;
-
-  localStorage.setItem(
-    "lanSecureChatConfig",
-    JSON.stringify({ targetIp, port, transport, encMode, kxMode, psk, role })
-  );
+  
+  // Get config based on role
+  let config = {
+    targetIp,
+    port,
+    transport,
+    attackMode,
+    dropRate,
+    delayMs,
+    modifyText
+  };
+  
+  if (role === "sender") {
+    const encMode = parseInt(document.getElementById("enc-mode").value, 10);
+    const kxMode = document.getElementById("kx-mode").value;
+    const psk = document.getElementById("psk-input").value;
+    const demo = document.getElementById("demo-mode").checked;
+    config.encMode = encMode;
+    config.kxMode = kxMode;
+    config.psk = psk;
+    config.demo = demo;
+  } else if (role === "receiver") {
+    // Get supported decryption methods from checkboxes
+    const supportedDecryptionModes = [];
+    if (document.getElementById("decrypt-plaintext").checked) {
+      supportedDecryptionModes.push(0);
+    }
+    if (document.getElementById("decrypt-gcm").checked) {
+      supportedDecryptionModes.push(1);
+    }
+    if (document.getElementById("decrypt-cbc-hmac").checked) {
+      supportedDecryptionModes.push(2);
+    }
+    if (document.getElementById("decrypt-dh").checked) {
+      supportedDecryptionModes.push(3);
+    }
+    
+    if (supportedDecryptionModes.length === 0) {
+      logLine("Please select at least one decryption method", "error");
+      return;
+    }
+    
+    const kxMode = document.getElementById("receiver-kx-mode").value;
+    const psk = document.getElementById("receiver-psk-input").value;
+    const demo = document.getElementById("receiver-demo-mode").checked;
+    config.supportedDecryptionModes = supportedDecryptionModes;
+    config.kxMode = kxMode;
+    config.psk = psk;
+    config.demo = demo;
+  }
 
   // Clear chat log when setting new role
   chatLog.innerHTML = "";
@@ -249,19 +241,7 @@ setRoleBtn.onclick = () => {
     JSON.stringify({
       type: "configureRole",
       role,
-      config: {
-        targetIp,
-        port,
-        transport,
-        encMode,
-        kxMode,
-        psk,
-        demo,
-        attackMode,
-        dropRate,
-        delayMs,
-        modifyText
-      }
+      config
     })
   );
 };
