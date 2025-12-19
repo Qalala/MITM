@@ -17,14 +17,37 @@ function initPythonCrypto() {
   }
   
   // Try to run Python initialization
-  const python = process.platform === "win32" ? "python" : "python3";
+  // Detect Termux (Android) - Termux uses python3 but may need explicit path
+  let python = "python3";
+  if (process.platform === "win32") {
+    python = "python";
+  } else if (process.env.TERMUX_VERSION || process.env.PREFIX?.includes("com.termux")) {
+    // Termux environment detected - use python3 explicitly
+    python = "python3";
+    console.log("Termux environment detected, using python3");
+  }
+  
   const initProcess = spawn(python, [pythonScript], {
     cwd: __dirname,
-    stdio: "inherit"
+    stdio: "inherit",
+    shell: false,
+    env: { 
+      ...process.env, 
+      PYTHONUNBUFFERED: "1",
+      // Termux-specific: ensure Python can find modules
+      ...(process.env.TERMUX_VERSION ? { PYTHONPATH: process.env.PREFIX + "/lib/python3.11/site-packages" } : {})
+    }
   });
   
   initProcess.on("error", (err) => {
     console.log(`NOTE: Could not run Python initialization: ${err.message}`);
+    if (err.code === "ENOENT") {
+      console.log(`NOTE: Python command '${python}' not found. Please install Python 3.6+`);
+      if (process.env.TERMUX_VERSION) {
+        console.log("NOTE: For Termux, install Python with: pkg install python");
+        console.log("NOTE: Then install cryptography with: pip install cryptography");
+      }
+    }
     console.log("NOTE: Server will continue, but Python crypto features may be limited");
   });
   

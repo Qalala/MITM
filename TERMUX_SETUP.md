@@ -68,13 +68,17 @@ python --version
 
 1. **Python crypto utilities are OPTIONAL** - The server works fine without them. The main encryption is handled by Node.js.
 
-2. **If cryptography fails to install**, you can still run the server:
+2. **Latest Python versions supported** - Termux now includes Python 3.11+ by default. The server automatically detects Termux and uses `python3` command.
+
+3. **If cryptography fails to install**, you can still run the server:
    ```bash
    npm start
    ```
    The server will show a note that Python crypto initialization was skipped, but everything else works.
 
-3. **Always use `pkg install` first** - Termux's package manager has pre-built packages that avoid compilation issues.
+4. **Always use `pkg install` first** - Termux's package manager has pre-built packages that avoid compilation issues.
+
+5. **Termux detection** - The server automatically detects Termux environment and configures Python paths correctly.
 
 ## Verification
 
@@ -90,4 +94,5 @@ python scripts/init_crypto.py
 ```
 
 If you see errors, the server will still work - Python crypto is just for additional validation/testing features.
+
 

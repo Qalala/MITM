@@ -9,9 +9,13 @@ const {
 const { ENC_MODES } = require("../../../core/protocol/constants");
 
 function createAttacker(config, ws) {
-  const listenIp = "0.0.0.0";
+  // MITM Interception Mode:
+  // - If interceptMode is true, attacker tries to bind to receiver's IP (for transparent interception)
+  // - If false, attacker listens on its own IP and sender must connect to attacker (proxy mode)
+  const interceptMode = config.interceptMode !== false; // Default to true for true MITM
+  const listenIp = interceptMode && config.targetIp ? config.targetIp : "0.0.0.0";
   const listenPort = config.port || 12347;
-  let targetIp = config.targetIp || null; // No default, must be set
+  let targetIp = config.targetIp || null; // Receiver's IP (victim)
   let targetPort = config.port || 12347;
   let mode = config.attackMode || "passive";
   let dropRate = Number(config.dropRate || 0);
@@ -93,15 +97,39 @@ function createAttacker(config, ws) {
       });
       // Use backlog=1 to enforce single connection semantics (like receiver)
       server.listen(listenPort, listenIp, 1, () => {
-        logUi(ws, "attacker", `Attacker listening on ${listenIp}:${listenPort}`);
-        sendUi(ws, {
-          type: "status",
-          status: `Attacker listening on ${listenIp}:${listenPort}. Configure targets and click 'Start Attack' to begin.`
-        });
+        if (interceptMode && targetIp && listenIp === targetIp) {
+          logAttack(`[MITM INTERCEPTION] Attacker is intercepting connections to ${targetIp}:${listenPort}`, "success");
+          logAttack(`[MITM INTERCEPTION] Sender should connect to receiver's IP (${targetIp}), attacker will intercept`, "info");
+          sendUi(ws, {
+            type: "status",
+            status: `MITM Interception Active: Listening on ${targetIp}:${listenPort}. Sender connects to receiver's IP, attacker intercepts transparently.`
+          });
+        } else {
+          logAttack(`[PROXY MODE] Attacker listening on ${listenIp}:${listenPort}`, "info");
+          logAttack(`[PROXY MODE] Sender must connect to attacker's IP (shown in Local IP), not receiver's IP`, "warning");
+          sendUi(ws, {
+            type: "status",
+            status: `Attacker listening on ${listenIp}:${listenPort}. Sender must connect to attacker's IP (proxy mode).`
+          });
+        }
       });
       server.on("error", (err) => {
-        logUi(ws, "attacker", `Server error: ${err.message}`);
-        sendUi(ws, { type: "error", error: `Server error: ${err.message}` });
+        // If binding to target IP failed, fall back to 0.0.0.0 (proxy mode)
+        if (interceptMode && targetIp && listenIp === targetIp && err.code === "EADDRNOTAVAIL") {
+          logAttack(`[FALLBACK] Cannot bind to receiver IP ${targetIp}, falling back to proxy mode on 0.0.0.0`, "warning");
+          logAttack(`[PROXY MODE] Sender must connect to attacker's IP instead of receiver's IP`, "info");
+          // Retry on 0.0.0.0
+          server.listen(listenPort, "0.0.0.0", 1, () => {
+            logAttack(`[PROXY MODE] Attacker listening on 0.0.0.0:${listenPort}`, "info");
+            sendUi(ws, {
+              type: "status",
+              status: `Attacker in proxy mode on 0.0.0.0:${listenPort}. Sender must connect to attacker's IP.`
+            });
+          });
+        } else {
+          logUi(ws, "attacker", `Server error: ${err.message}`);
+          sendUi(ws, { type: "error", error: `Server error: ${err.message}` });
+        }
       });
     } catch (e) {
       logUi(ws, "attacker", `Attacker failed to start: ${e.message}`);
@@ -497,8 +525,13 @@ function createAttacker(config, ws) {
     }
     
     logAttack("Attacker is ready. Waiting for sender to connect...", "info");
-    logAttack(`Note: Sender should connect to attacker's IP (shown in Local IP), not victim's IP (${targetIp})`, "info");
-    logAttack(`Attacker will intercept sender connections and proxy to victim at ${targetIp}:${targetPort}`, "info");
+    if (interceptMode && listenIp === targetIp) {
+      logAttack(`[MITM INTERCEPTION] Sender should connect to receiver's IP: ${targetIp}:${targetPort}`, "info");
+      logAttack(`[MITM INTERCEPTION] Attacker will transparently intercept and forward to receiver`, "info");
+    } else {
+      logAttack(`[PROXY MODE] Sender must connect to attacker's IP (shown in Local IP), not receiver's IP (${targetIp})`, "warning");
+      logAttack(`[PROXY MODE] Attacker will proxy sender connections to receiver at ${targetIp}:${targetPort}`, "info");
+    }
   }
 
   function cleanup() {

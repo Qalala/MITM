@@ -333,3 +333,22 @@
 [2025-12-19T21:26:46.924Z] [sender] SENT: hi
 [2025-12-19T21:27:00.219Z] [sender] SENT: hi
 [2025-12-19T21:42:23.194Z] [sender] Sender configured with encryption mode: 0, KX mode: psk
+[2025-12-19T21:48:41.102Z] [sender] Sender configured with encryption mode: 0, KX mode: psk
+[2025-12-19T21:48:48.896Z] [sender] Received encryption change broadcast: mode=0, kx=psk from receiver at 192.168.1.10
+[2025-12-19T21:49:41.582Z] [sender] Updated encryption mode to 0 from connect config
+[2025-12-19T21:49:41.583Z] [sender] Connecting with encryption mode: 0, KX mode: psk
+[2025-12-19T21:49:41.675Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T21:49:41.731Z] [sender] Handshake complete, ready to send data
+[2025-12-19T21:49:48.584Z] [sender] SENT: hi
+[2025-12-19T21:50:14.619Z] [sender] Updated encryption mode to 0 from connect config
+[2025-12-19T21:50:14.620Z] [sender] Connecting with encryption mode: 0, KX mode: psk
+[2025-12-19T21:50:14.621Z] [sender] Background receive error: Premature close
+[2025-12-19T21:50:14.651Z] [sender] Connected to 192.168.1.7:12347, starting handshake
+[2025-12-19T21:50:14.666Z] [sender] Failed to connect: read ECONNRESET
+[2025-12-19T21:50:49.821Z] [sender] Updated encryption mode to 0 from connect config
+[2025-12-19T21:50:49.822Z] [sender] Connecting with encryption mode: 0, KX mode: psk
+[2025-12-19T21:50:49.876Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T21:50:49.927Z] [sender] Handshake complete, ready to send data
+[2025-12-19T21:51:15.409Z] [sender] SENT: hi
+[2025-12-19T21:51:49.779Z] [sender] SENT: hi
+[2025-12-19T21:53:14.858Z] [sender] Background receive error: read ECONNRESET
