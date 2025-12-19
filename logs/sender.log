@@ -384,3 +384,33 @@
 [2025-12-19T23:22:25.860Z] [sender] Handshake complete, ready to send data
 [2025-12-19T23:22:39.889Z] [sender] SENT: hi
 [2025-12-19T23:23:41.537Z] [sender] Background receive error: read ECONNRESET
+[2025-12-19T23:46:46.682Z] [sender] Sender configured with encryption mode: 0, KX mode: psk
+[2025-12-19T23:46:57.386Z] [sender] Received encryption change broadcast: mode=0, kx=psk from receiver at 192.168.1.10
+[2025-12-19T23:47:26.843Z] [sender] Updated encryption mode to 0 from connect config
+[2025-12-19T23:47:26.844Z] [sender] Connecting with encryption mode: 0, KX mode: psk
+[2025-12-19T23:47:26.923Z] [sender] Connected to 192.168.1.7:12347, starting handshake
+[2025-12-19T23:47:26.944Z] [sender] Failed to connect: read ECONNRESET
+[2025-12-19T23:47:29.225Z] [sender] Updated encryption mode to 0 from connect config
+[2025-12-19T23:47:29.226Z] [sender] Connecting with encryption mode: 0, KX mode: psk
+[2025-12-19T23:47:29.280Z] [sender] Connected to 192.168.1.7:12347, starting handshake
+[2025-12-19T23:47:29.291Z] [sender] Failed to connect: read ECONNRESET
+[2025-12-19T23:47:30.098Z] [sender] Updated encryption mode to 0 from connect config
+[2025-12-19T23:47:30.098Z] [sender] Connecting with encryption mode: 0, KX mode: psk
+[2025-12-19T23:47:30.103Z] [sender] Connected to 192.168.1.7:12347, starting handshake
+[2025-12-19T23:47:30.113Z] [sender] Failed to connect: read ECONNRESET
+[2025-12-19T23:47:32.662Z] [sender] Updated encryption mode to 0 from connect config
+[2025-12-19T23:47:32.662Z] [sender] Connecting with encryption mode: 0, KX mode: psk
+[2025-12-19T23:47:32.758Z] [sender] Connected to 192.168.1.7:12347, starting handshake
+[2025-12-19T23:47:32.771Z] [sender] Failed to connect: read ECONNRESET
+[2025-12-19T23:47:45.241Z] [sender] Updated encryption mode to 0 from connect config
+[2025-12-19T23:47:45.242Z] [sender] Connecting with encryption mode: 0, KX mode: psk
+[2025-12-19T23:47:45.355Z] [sender] Connected to 192.168.1.7:12347, starting handshake
+[2025-12-19T23:47:45.362Z] [sender] Failed to connect: read ECONNRESET
+[2025-12-19T23:48:12.187Z] [sender] Updated encryption mode to 0 from connect config
+[2025-12-19T23:48:12.187Z] [sender] Connecting with encryption mode: 0, KX mode: psk
+[2025-12-19T23:48:12.288Z] [sender] Connected to 192.168.1.7:12347, starting handshake
+[2025-12-19T23:48:12.298Z] [sender] Failed to connect: read ECONNRESET
+[2025-12-19T23:48:22.285Z] [sender] Updated encryption mode to 0 from connect config
+[2025-12-19T23:48:22.285Z] [sender] Connecting with encryption mode: 0, KX mode: psk
+[2025-12-19T23:48:22.290Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T23:48:22.348Z] [sender] Handshake complete, ready to send data

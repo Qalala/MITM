@@ -1100,6 +1100,7 @@ if (document.readyState === "loading") {
 } else {
   setupSecurityListeners();
   setupAttackModeOptions();
+  setupConnectToReceiverButton();
   setupStartAttackButton();
   setupAttackerIpListeners();
 }
