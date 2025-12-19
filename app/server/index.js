@@ -147,6 +147,18 @@ wss.on("connection", (ws) => {
             break;
           }
           
+          const cfg = msg.config || {};
+          const port = cfg.port || 12347;
+          
+          // Ensure discovery is started for sender (needed for discovery to work)
+          if (!discovery || !discovery.socket) {
+            discovery = startDiscovery("sender", port);
+          } else {
+            // Update discovery role/port
+            discovery.currentRole = "sender";
+            discovery.currentPort = port;
+          }
+          
           // If role is not set or doesn't match, configure it first
           if (currentRole !== "sender" || !roleInstance) {
             // Auto-configure sender role if not set
@@ -154,34 +166,32 @@ wss.on("connection", (ws) => {
             if (roleInstance && roleInstance.stop) {
               await roleInstance.stop();
             }
-            const cfg = msg.config || {};
-            const port = cfg.port || 12347;
-            
-            // Start discovery if not already started
-            if (!discovery || !discovery.socket) {
-              discovery = startDiscovery("sender", port);
-            } else {
-              discovery.currentRole = "sender";
-              discovery.currentPort = port;
-            }
             
             roleInstance = createSender(cfg, ws);
             
-            // Broadcast presence
+            // Broadcast presence so receiver can discover sender
             broadcastPresence(discovery, "sender", port);
             if (broadcastInterval) {
               clearInterval(broadcastInterval);
             }
             broadcastInterval = setInterval(() => {
-              broadcastPresence(discovery, "sender", port);
+              if (discovery && discovery.socket) {
+                broadcastPresence(discovery, "sender", port);
+              }
             }, 3000);
+          } else {
+            // Role already set, but update config if needed
+            // The connect function in sender will handle config updates
           }
+          
+          // Small delay to ensure role instance is ready
+          await new Promise(resolve => setTimeout(resolve, 100));
           
           if (!roleInstance || !roleInstance.connect) {
             ws.send(JSON.stringify({ type: "error", error: "Role not ready. Please wait a moment and try again." }));
             break;
           }
-          const cfg = msg.config || {};
+          
           await roleInstance.connect(cfg);
           break;
         }
