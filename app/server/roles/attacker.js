@@ -18,9 +18,6 @@ function createAttacker(config, ws) {
   let delayMs = Number(config.delayMs || 0);
   let modifyText = (config.modifyText && config.modifyText.trim()) || "[MITM modified]";
   
-  // New: Support for attacking both ends
-  let senderIp = config.senderIp || null;
-  let receiverIp = config.receiverIp || null;
   let attackActive = false;
 
   let server = null;
@@ -55,6 +52,8 @@ function createAttacker(config, ws) {
     return null;
   }
 
+  let isHandlingClient = false; // Prevent concurrent client handling
+
   (async () => {
     try {
       server = net.createServer((c) => {
@@ -64,24 +63,45 @@ function createAttacker(config, ws) {
             clientConn.end();
             clientConn.destroy();
           } catch {}
+          clientConn = null;
         }
         if (serverConn) {
           try {
             serverConn.end();
             serverConn.destroy();
           } catch {}
+          serverConn = null;
         }
+        
+        // Prevent concurrent handling
+        if (isHandlingClient) {
+          logUi(ws, "attacker", "New connection rejected: already handling a connection");
+          try {
+            c.end();
+            c.destroy();
+          } catch {}
+          return;
+        }
+        
         clientConn = c;
-        handleNewClient().catch((e) =>
-          logUi(ws, "attacker", `Client handling error: ${e.message}`)
-        );
+        isHandlingClient = true;
+        handleNewClient().catch((e) => {
+          logUi(ws, "attacker", `Client handling error: ${e.message}`);
+        }).finally(() => {
+          isHandlingClient = false;
+        });
       });
-      server.listen(listenPort, listenIp, () => {
+      // Use backlog=1 to enforce single connection semantics (like receiver)
+      server.listen(listenPort, listenIp, 1, () => {
         logUi(ws, "attacker", `Attacker listening on ${listenIp}:${listenPort}`);
         sendUi(ws, {
           type: "status",
           status: `Attacker listening on ${listenIp}:${listenPort}. Configure targets and click 'Start Attack' to begin.`
         });
+      });
+      server.on("error", (err) => {
+        logUi(ws, "attacker", `Server error: ${err.message}`);
+        sendUi(ws, { type: "error", error: `Server error: ${err.message}` });
       });
     } catch (e) {
       logUi(ws, "attacker", `Attacker failed to start: ${e.message}`);
@@ -104,19 +124,12 @@ function createAttacker(config, ws) {
       } catch {}
     }
     
-    // Determine target based on configuration
-    let actualTargetIp = targetIp;
-    if (receiverIp) {
-      actualTargetIp = receiverIp; // If receiver IP is set, use it as target
-    } else if (senderIp && !receiverIp) {
-      // If only sender IP is set, we're intercepting sender -> receiver
-      // In this case, we need receiver IP from config or use default
-      actualTargetIp = targetIp;
-    }
+    // Use targetIp as the victim's IP (receiver that attacker proxies to)
+    const actualTargetIp = targetIp;
     
     if (!actualTargetIp) {
-      logUi(ws, "attacker", "ERROR: Target IP not configured. Please set Receiver IP in attacker controls.");
-      sendUi(ws, { type: "error", error: "Target IP not configured. Please set Receiver IP in Attacker Controls." });
+      logUi(ws, "attacker", "ERROR: Victim IP (target IP) not configured. Please enter victim's IP address.");
+      sendUi(ws, { type: "error", error: "Victim IP (target IP) not configured. Please enter the victim's IP address in Target IP field." });
       try {
         if (clientConn) {
           clientConn.end();
@@ -124,6 +137,7 @@ function createAttacker(config, ws) {
         }
       } catch {}
       clientConn = null;
+      isHandlingClient = false;
       return;
     }
     
@@ -150,12 +164,63 @@ function createAttacker(config, ws) {
       logAttack("Connected to real receiver, starting bidirectional relay", "info");
       sendUi(ws, { type: "status", status: `MITM active: sender <-> attacker <-> receiver (${actualTargetIp}:${targetPort})` });
 
-      relay(clientConn, serverConn, "sender->receiver").catch((e) =>
-        logUi(ws, "attacker", `Relay error (s->r): ${e.message}`)
-      );
-      relay(serverConn, clientConn, "receiver->sender").catch((e) =>
-        logUi(ws, "attacker", `Relay error (r->s): ${e.message}`)
-      );
+      // Add error and close handlers to detect connection failures
+      const cleanupConnections = () => {
+        if (clientConn) {
+          try {
+            clientConn.removeAllListeners();
+            clientConn.end();
+            clientConn.destroy();
+          } catch {}
+          clientConn = null;
+        }
+        if (serverConn) {
+          try {
+            serverConn.removeAllListeners();
+            serverConn.end();
+            serverConn.destroy();
+          } catch {}
+          serverConn = null;
+        }
+        isHandlingClient = false;
+      };
+
+      const onClientError = (err) => {
+        logAttack(`Sender connection error: ${err.message}`, "failed");
+        cleanupConnections();
+      };
+      const onClientClose = () => {
+        logAttack("Sender connection closed", "warning");
+        cleanupConnections();
+      };
+      const onServerError = (err) => {
+        logAttack(`Receiver connection error: ${err.message}`, "failed");
+        cleanupConnections();
+      };
+      const onServerClose = () => {
+        logAttack("Receiver connection closed", "warning");
+        cleanupConnections();
+      };
+
+      clientConn.on("error", onClientError);
+      clientConn.on("close", onClientClose);
+      serverConn.on("error", onServerError);
+      serverConn.on("close", onServerClose);
+
+      // Start bidirectional relay with proper cleanup
+      const relayPromise1 = relay(clientConn, serverConn, "sender->receiver").catch((e) => {
+        logUi(ws, "attacker", `Relay error (s->r): ${e.message}`);
+      }).finally(() => {
+        // When one relay stops, cleanup the other
+        cleanupConnections();
+      });
+      
+      const relayPromise2 = relay(serverConn, clientConn, "receiver->sender").catch((e) => {
+        logUi(ws, "attacker", `Relay error (r->s): ${e.message}`);
+      }).finally(() => {
+        // When one relay stops, cleanup the other
+        cleanupConnections();
+      });
     } catch (e) {
       logAttack(`Failed to connect to receiver at ${actualTargetIp}:${targetPort}: ${e.message}`, "failed");
       sendUi(ws, { type: "error", error: `Failed to connect to receiver: ${e.message}. Check that receiver is running and Receiver IP is correct.` });
@@ -171,6 +236,7 @@ function createAttacker(config, ws) {
       } catch {}
       clientConn = null;
       serverConn = null;
+      isHandlingClient = false;
     }
   }
 
@@ -293,10 +359,32 @@ function createAttacker(config, ws) {
         }
       }
 
-      // Forward
-      const encoded = encodeFrame(outFrame.type, outFrame.payload);
-      dst.write(encoded);
+      // Forward - check connection state before writing
+      if (!dst || dst.destroyed || dst.closed) {
+        logAttack(`Destination connection closed, stopping relay: ${direction}`, "warning");
+        break;
+      }
+      
+      try {
+        const encoded = encodeFrame(outFrame.type, outFrame.payload);
+        // Check if socket is writable before writing
+        if (!dst.writable) {
+          logAttack(`Destination socket not writable, stopping relay: ${direction}`, "warning");
+          break;
+        }
+        const written = dst.write(encoded);
+        // Handle backpressure (though unlikely with our frame sizes)
+        if (!written) {
+          await new Promise((resolve) => dst.once("drain", resolve));
+        }
+      } catch (e) {
+        logAttack(`Failed to write frame in ${direction}: ${e.message}`, "failed");
+        break; // Exit relay loop on write error
+      }
     }
+    
+    // Relay loop exited - log reason
+    logAttack(`Relay stopped: ${direction}`, "info");
   }
 
   function maybe(percent) {
@@ -317,48 +405,52 @@ function createAttacker(config, ws) {
     if (newConfig.modifyText !== undefined) {
       modifyText = (newConfig.modifyText && newConfig.modifyText.trim()) || "[MITM modified]";
     }
-    // Update target IPs if provided
-    if (newConfig.senderIp !== undefined) {
-      senderIp = newConfig.senderIp || null;
-    }
-    if (newConfig.receiverIp !== undefined) {
-      receiverIp = newConfig.receiverIp || null;
-      if (receiverIp) {
-        targetIp = receiverIp; // Update target IP when receiver IP is set
-      }
-    }
+    // Update target IP (victim's IP - the receiver that attacker proxies to)
     if (newConfig.targetIp !== undefined) {
       targetIp = newConfig.targetIp || null;
+      if (targetIp) {
+        logAttack(`Victim IP updated to: ${targetIp}`, "info");
+      }
     }
   }
 
   async function startAttack(attackConfig) {
     attackActive = true;
-    senderIp = attackConfig.senderIp || null;
-    receiverIp = attackConfig.receiverIp || null;
-    targetIp = receiverIp || attackConfig.targetIp || targetIp;
+    // Update target IP from config (victim's IP - the receiver that attacker proxies to)
+    if (attackConfig.targetIp) {
+      targetIp = attackConfig.targetIp;
+    }
     
     updateAttackConfig(attackConfig);
     
-    logAttack(`Attack started: mode=${mode}, sender=${senderIp || "auto"}, receiver=${receiverIp || targetIp}`, "info");
-    sendUi(ws, { type: "status", status: `Attack active: ${mode} mode` });
+    if (!targetIp) {
+      logAttack("ERROR: Victim IP (target IP) is required. Please enter victim's IP address.", "failed");
+      sendUi(ws, { type: "error", error: "Victim IP is required. Please enter the target IP address." });
+      attackActive = false;
+      return;
+    }
     
-    // If we have both sender and receiver IPs, we could potentially set up bidirectional interception
-    // For now, the attacker listens and intercepts when sender connects
+    logAttack(`Attack started: mode=${mode}, victim=${targetIp}:${targetPort}`, "info");
+    sendUi(ws, { type: "status", status: `Attack active: ${mode} mode, victim: ${targetIp}:${targetPort}` });
+    
+    // The attacker listens and intercepts when sender connects
     if (!server) {
       logAttack("Attacker server not ready. Please wait for server to start.", "warning");
       return;
     }
     
     logAttack("Attacker is ready. Waiting for sender to connect...", "info");
-    logAttack("Note: Sender should connect to attacker's IP (not receiver's IP) for MITM to work", "info");
+    logAttack(`Note: Sender should connect to attacker's IP (shown in Local IP), not victim's IP (${targetIp})`, "info");
+    logAttack(`Attacker will intercept sender connections and proxy to victim at ${targetIp}:${targetPort}`, "info");
   }
 
   function cleanup() {
     running = false;
     attackActive = false;
+    isHandlingClient = false;
     try {
       if (clientConn) {
+        clientConn.removeAllListeners();
         clientConn.end();
         clientConn.destroy();
         clientConn = null;
@@ -366,6 +458,7 @@ function createAttacker(config, ws) {
     } catch {}
     try {
       if (serverConn) {
+        serverConn.removeAllListeners();
         serverConn.end();
         serverConn.destroy();
         serverConn = null;
@@ -373,6 +466,7 @@ function createAttacker(config, ws) {
     } catch {}
     try {
       if (server) {
+        server.removeAllListeners();
         server.close();
         server = null;
       }

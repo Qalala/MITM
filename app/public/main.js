@@ -35,6 +35,16 @@ function showRoleSections(role) {
   document.getElementById("chat-section").style.display = "none";
   document.getElementById("attacker-section").style.display = "none";
   
+  // Update placeholder based on role
+  const targetIpInput = document.getElementById("target-ip");
+  if (targetIpInput) {
+    if (role === "attacker") {
+      targetIpInput.placeholder = "enter victim's ip";
+    } else {
+      targetIpInput.placeholder = "enter target ip";
+    }
+  }
+  
   // Show role-specific sections (each in its own window)
   if (role === "sender") {
     document.getElementById("network-section").style.display = "block";
@@ -281,6 +291,11 @@ setRoleBtn.onclick = async () => {
     config.demo = demo;
     logLine(`Receiver configured: Decryption Mode=${decryptionMode}, KX Mode=${kxMode}`, "role-selected");
     logLine(`⚠ IMPORTANT: Receiver will only accept connections from senders using Encryption Mode ${decryptionMode}`, "role-selected");
+  } else if (role === "attacker") {
+    // For attacker, targetIp is the victim's (receiver's) IP
+    // No encryption config needed - attacker just relays frames
+    logLine(`Attacker configured. Victim IP: ${targetIp || "not set"}`, "role-selected");
+    logLine("⚠ Note: Sender should connect to Attacker's IP (shown in Local IP), not victim's IP", "role-selected");
   }
 
   // Clear chat log when setting new role
@@ -443,17 +458,7 @@ function displayDiscoveryResults(results) {
   title.style.color = "#eaeaea";
   discoverResults.appendChild(title);
 
-  // For attacker role, also update the attacker targets list
-  const attackerTargets = document.getElementById("attacker-targets");
-  if (currentRole === "attacker" && attackerTargets && results.length > 0) {
-    attackerTargets.innerHTML = "";
-    const attackerTitle = document.createElement("div");
-    attackerTitle.textContent = `Found ${results.length} device(s):`;
-    attackerTitle.style.marginBottom = "8px";
-    attackerTitle.style.fontWeight = "bold";
-    attackerTitle.style.color = "#ff6b6b";
-    attackerTargets.appendChild(attackerTitle);
-  }
+  // Attacker uses the main discovery results, no separate list needed
 
   results.forEach(result => {
     // Parse result format: "role@ip:port"
@@ -505,17 +510,13 @@ function displayDiscoveryResults(results) {
           // Update status to show receiver is ready
           statusEl.textContent = `Receiver listening - will accept from ${ip}:${port}`;
         } else if (currentRole === "attacker") {
-          // For attacker, set target IP to the discovered device
-          logLine(`Attacker target set to: ${role} at ${ip}:${port}`, "success");
-          logLine("Attacker will intercept connections to this target", "role-selected");
-          // Update attacker UI
-          if (role === "sender") {
-            document.getElementById("attacker-sender-ip").value = ip;
-          } else if (role === "receiver") {
-            document.getElementById("attacker-receiver-ip").value = ip;
-          }
+          // For attacker, set target IP to the discovered device (victim's IP)
+          // Attacker intercepts when sender connects to attacker, then proxies to this victim IP
+          logLine(`Attacker victim target set to: ${role} at ${ip}:${port}`, "success");
+          logLine("Attacker will intercept connections and proxy to this victim", "role-selected");
+          logLine("Note: Sender should connect to Attacker's IP (shown in Local IP), not victim's IP", "role-selected");
           // Update status
-          statusEl.textContent = `Attacker will intercept: ${role} at ${ip}:${port}`;
+          statusEl.textContent = `Attacker will proxy to victim: ${ip}:${port}`;
           updateTargetDisplay();
         } else {
           logLine(`Selected discovered device: ${role} at ${ip}:${port}`, "success");
@@ -523,42 +524,6 @@ function displayDiscoveryResults(results) {
       };
       
       discoverResults.appendChild(div);
-      
-      // Also add to attacker targets list
-      if (currentRole === "attacker" && attackerTargets) {
-        const attackerDiv = document.createElement("div");
-        attackerDiv.style.padding = "4px";
-        attackerDiv.style.cursor = "pointer";
-        attackerDiv.style.marginBottom = "4px";
-        attackerDiv.style.borderBottom = "1px solid #555";
-        attackerDiv.style.color = "#eaeaea";
-        attackerDiv.onmouseover = () => { attackerDiv.style.background = "#3d3d3d"; };
-        attackerDiv.onmouseout = () => { attackerDiv.style.background = "transparent"; };
-        
-        const attackerRoleSpan = document.createElement("span");
-        attackerRoleSpan.textContent = role.toUpperCase() + ": ";
-        attackerRoleSpan.style.color = role === "sender" ? "#4a9eff" : (role === "receiver" ? "#4caf50" : "#ff6b6b");
-        attackerRoleSpan.style.fontWeight = "bold";
-        
-        const attackerIpSpan = document.createElement("span");
-        attackerIpSpan.textContent = ip + ":" + port;
-        attackerIpSpan.style.color = "#eaeaea";
-        
-        attackerDiv.appendChild(attackerRoleSpan);
-        attackerDiv.appendChild(attackerIpSpan);
-        
-        attackerDiv.onclick = () => {
-          if (role === "sender") {
-            document.getElementById("attacker-sender-ip").value = ip;
-            logLine(`Selected sender target: ${ip}:${port}`, "success");
-          } else if (role === "receiver") {
-            document.getElementById("attacker-receiver-ip").value = ip;
-            logLine(`Selected receiver target: ${ip}:${port}`, "success");
-          }
-        };
-        
-        attackerTargets.appendChild(attackerDiv);
-      }
     } else {
       // Fallback for unexpected format
       const div = document.createElement("div");
@@ -807,22 +772,13 @@ function updateTargetDisplay() {
   const targetIp = document.getElementById("target-ip")?.value.trim() || "";
   const targetPort = document.getElementById("target-port")?.value.trim() || "";
   
-  // For attacker, also check attacker-specific IPs
+  // For attacker, show victim IP (target IP)
   let displayText = "";
   if (currentRole === "attacker") {
-    const senderIp = document.getElementById("attacker-sender-ip")?.value.trim() || "";
-    const receiverIp = document.getElementById("attacker-receiver-ip")?.value.trim() || "";
-    
-    if (senderIp && receiverIp) {
-      displayText = `Sender: ${senderIp}:${targetPort} → Receiver: ${receiverIp}:${targetPort}`;
-    } else if (receiverIp) {
-      displayText = `Receiver: ${receiverIp}:${targetPort}`;
-    } else if (senderIp) {
-      displayText = `Sender: ${senderIp}:${targetPort}`;
-    } else if (targetIp) {
-      displayText = `${targetIp}:${targetPort}`;
+    if (targetIp) {
+      displayText = `Victim: ${targetIp}:${targetPort}`;
     } else {
-      displayText = "Not set";
+      displayText = "Victim IP not set";
     }
   } else {
     if (targetIp && targetPort) {
@@ -1027,21 +983,9 @@ function updateAttackConfig() {
 }
 
 // Function to setup attacker IP input listeners
+// Attacker now uses the main target-ip field, so no separate listeners needed
 function setupAttackerIpListeners() {
-  const senderIpInput = document.getElementById("attacker-sender-ip");
-  const receiverIpInput = document.getElementById("attacker-receiver-ip");
-  
-  if (senderIpInput) {
-    senderIpInput.addEventListener("input", () => {
-      updateTargetDisplay();
-    });
-  }
-  
-  if (receiverIpInput) {
-    receiverIpInput.addEventListener("input", () => {
-      updateTargetDisplay();
-    });
-  }
+  // Attacker uses target-ip field which already has listeners
 }
 
 // Function to handle start attack button
@@ -1057,28 +1001,26 @@ function setupStartAttackButton() {
       return;
     }
     
-    const senderIp = document.getElementById("attacker-sender-ip").value.trim();
-    const receiverIp = document.getElementById("attacker-receiver-ip").value.trim();
+    const targetIp = document.getElementById("target-ip").value.trim();
     const port = parseInt(document.getElementById("target-port").value, 10) || 12347;
     const attackMode = document.getElementById("attack-mode").value;
     const dropRate = parseInt(document.getElementById("drop-rate").value, 10) || 0;
     const delayMs = parseInt(document.getElementById("delay-ms").value, 10) || 0;
     const modifyText = document.getElementById("modify-text").value.trim() || "[MITM modified]";
     
-    if (!senderIp && !receiverIp) {
-      logLine("Please select at least one target (sender or receiver)", "error");
-      addAttackLog("Error: No targets selected", "failed");
+    if (!targetIp) {
+      logLine("Please enter victim's IP address (Target IP)", "error");
+      addAttackLog("Error: Victim IP (Target IP) is required", "failed");
       return;
     }
     
-    logLine(`Starting attack: mode=${attackMode}`, "role-selected");
-    addAttackLog(`Starting attack: ${attackMode}`, "info");
+    logLine(`Starting attack on victim: ${targetIp}:${port}, mode=${attackMode}`, "role-selected");
+    addAttackLog(`Starting attack: ${attackMode} on victim ${targetIp}:${port}`, "info");
     
     ws.send(JSON.stringify({
       type: "startAttack",
       config: {
-        senderIp,
-        receiverIp,
+        targetIp,
         port,
         attackMode,
         dropRate,
