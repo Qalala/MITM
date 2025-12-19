@@ -182,7 +182,12 @@ function broadcastPresence(state, role, mainPort, encInfo = null) {
   if (encInfo && role !== "attacker") {
     msgObj.encMode = encInfo.encMode;
     msgObj.kxMode = encInfo.kxMode;
-    msgObj.encryptionChanged = true;
+    // Only set encryptionChanged flag if this is a new encryption config
+    const encKey = `${encInfo.encMode}_${encInfo.kxMode}`;
+    if (!state.lastEncKey || state.lastEncKey !== encKey) {
+      msgObj.encryptionChanged = true;
+      state.lastEncKey = encKey;
+    }
   }
   
   const msg = Buffer.from(JSON.stringify(msgObj), "utf8");

@@ -345,27 +345,22 @@ function createReceiver(config, ws) {
     const oldKxMode = kxMode;
     const oldPsk = psk;
     let configChanged = false;
+    let changeDescription = [];
     
     if (newConfig.encMode !== undefined && newConfig.encMode !== null) {
       const newEncMode = Number(newConfig.encMode);
       if (newEncMode >= 0 && newEncMode <= 3 && newEncMode !== encMode) {
         encMode = newEncMode;
         configChanged = true;
-        logUi(ws, "receiver", `⚠ DECRYPTION MODE CHANGED: ${oldEncMode} → ${encMode}`);
-        sendUi(ws, { 
-          type: "log", 
-          message: `⚠ WARNING: Decryption mode changed from ${oldEncMode} to ${encMode}. Current connection will be closed. New connections must use encryption mode ${encMode}.` 
-        });
+        changeDescription.push(`decryption mode: ${oldEncMode} → ${encMode}`);
+        logUi(ws, "receiver", `Security config updated: decryption mode changed from ${oldEncMode} to ${encMode}`);
       }
     }
     if (newConfig.kxMode && newConfig.kxMode !== kxMode) {
       kxMode = newConfig.kxMode;
       configChanged = true;
-      logUi(ws, "receiver", `⚠ KEY EXCHANGE MODE CHANGED: ${oldKxMode} → ${kxMode}`);
-      sendUi(ws, { 
-        type: "log", 
-        message: `⚠ WARNING: Key exchange mode changed from ${oldKxMode} to ${kxMode}. Current connection will be closed.` 
-      });
+      changeDescription.push(`key exchange: ${oldKxMode} → ${kxMode}`);
+      logUi(ws, "receiver", `Security config updated: key exchange mode changed from ${oldKxMode} to ${kxMode}`);
     }
     if (newConfig.psk !== undefined) {
       const newPsk = newConfig.psk ? Buffer.from(newConfig.psk) : null;
@@ -373,11 +368,8 @@ function createReceiver(config, ws) {
       if (pskChanged) {
         psk = newPsk;
         configChanged = true;
+        changeDescription.push("PSK updated");
         logUi(ws, "receiver", `Security config updated: PSK ${psk ? "updated" : "cleared"}`);
-        sendUi(ws, { 
-          type: "log", 
-          message: `⚠ WARNING: PSK changed. Current connection will be closed. New connections must use the new PSK.` 
-        });
       }
     }
     if (newConfig.demo !== undefined) {
@@ -388,29 +380,34 @@ function createReceiver(config, ws) {
       }
     }
     
-    // If security config changed and there's an active connection, close it to force reconnection
-    if (configChanged && conn && handshakeDone) {
-      logUi(ws, "receiver", "⚠ Closing current connection due to security mode change. Waiting for new connection with updated settings.");
-      sendUi(ws, { 
-        type: "log", 
-        message: "⚠ Current connection closed due to security mode change. Sender must reconnect with matching encryption mode." 
-      });
-      try {
-        conn.end();
-        conn.destroy();
-      } catch {}
-      conn = null;
-      handshakeDone = false;
-      sessionKey = null;
-      sharedSecret = null;
-      seqIn = 0;
-      negotiatedEncMode = null;
-    } else if (configChanged && server) {
-      logUi(ws, "receiver", "⚠ Security settings updated. New connections will use the updated settings.");
-      sendUi(ws, { 
-        type: "log", 
-        message: "⚠ Security settings updated. New connections will use the updated settings." 
-      });
+    // Send only ONE warning message if config changed
+    if (configChanged) {
+      const changeMsg = changeDescription.join(", ");
+      if (conn && handshakeDone) {
+        // Active connection - close it and warn once
+        logUi(ws, "receiver", `⚠ Security settings changed (${changeMsg}). Closing connection.`);
+        sendUi(ws, { 
+          type: "log", 
+          message: `⚠ Security settings changed (${changeMsg}). Connection closed. Sender must reconnect with matching encryption mode ${encMode}.` 
+        });
+        try {
+          conn.end();
+          conn.destroy();
+        } catch {}
+        conn = null;
+        handshakeDone = false;
+        sessionKey = null;
+        sharedSecret = null;
+        seqIn = 0;
+        negotiatedEncMode = null;
+      } else {
+        // No active connection - just notify once
+        logUi(ws, "receiver", `Security settings updated (${changeMsg}).`);
+        sendUi(ws, { 
+          type: "log", 
+          message: `Security settings updated (${changeMsg}). New connections will use these settings.` 
+        });
+      }
     }
   }
 

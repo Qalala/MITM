@@ -121,3 +121,101 @@
 [2025-12-19T15:27:36.143Z] [sender] Handshake complete, ready to send data
 [2025-12-19T15:27:39.584Z] [sender] SENT: hi
 [2025-12-19T15:28:02.765Z] [sender] Background receive error: read ECONNRESET
+[2025-12-19T17:59:35.727Z] [sender] Sender configured with encryption mode: 0, KX mode: psk
+[2025-12-19T17:59:40.978Z] [sender] Received encryption change broadcast: mode=0, kx=psk from receiver at 192.168.1.10
+[2025-12-19T17:59:43.979Z] [sender] Received encryption change broadcast: mode=0, kx=psk from receiver at 192.168.1.10
+[2025-12-19T17:59:46.984Z] [sender] Received encryption change broadcast: mode=0, kx=psk from receiver at 192.168.1.10
+[2025-12-19T17:59:49.994Z] [sender] Received encryption change broadcast: mode=0, kx=psk from receiver at 192.168.1.10
+[2025-12-19T17:59:53.004Z] [sender] Received encryption change broadcast: mode=0, kx=psk from receiver at 192.168.1.10
+[2025-12-19T17:59:56.010Z] [sender] Received encryption change broadcast: mode=0, kx=psk from receiver at 192.168.1.10
+[2025-12-19T17:59:59.015Z] [sender] Received encryption change broadcast: mode=0, kx=psk from receiver at 192.168.1.10
+[2025-12-19T18:00:02.025Z] [sender] Received encryption change broadcast: mode=0, kx=psk from receiver at 192.168.1.10
+[2025-12-19T18:00:05.031Z] [sender] Received encryption change broadcast: mode=0, kx=psk from receiver at 192.168.1.10
+[2025-12-19T18:00:08.041Z] [sender] Received encryption change broadcast: mode=0, kx=psk from receiver at 192.168.1.10
+[2025-12-19T18:00:11.047Z] [sender] Received encryption change broadcast: mode=0, kx=psk from receiver at 192.168.1.10
+[2025-12-19T18:00:14.057Z] [sender] Received encryption change broadcast: mode=0, kx=psk from receiver at 192.168.1.10
+[2025-12-19T18:00:17.068Z] [sender] Received encryption change broadcast: mode=0, kx=psk from receiver at 192.168.1.10
+[2025-12-19T18:00:20.075Z] [sender] Received encryption change broadcast: mode=0, kx=psk from receiver at 192.168.1.10
+[2025-12-19T18:00:23.081Z] [sender] Received encryption change broadcast: mode=0, kx=psk from receiver at 192.168.1.10
+[2025-12-19T18:00:26.084Z] [sender] Received encryption change broadcast: mode=0, kx=psk from receiver at 192.168.1.10
+[2025-12-19T18:00:26.728Z] [sender] Updated encryption mode to 0 from connect config
+[2025-12-19T18:00:26.729Z] [sender] Connecting with encryption mode: 0, KX mode: psk
+[2025-12-19T18:00:26.732Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T18:00:26.785Z] [sender] Handshake complete, ready to send data
+[2025-12-19T18:00:29.094Z] [sender] Received encryption change broadcast: mode=0, kx=psk from receiver at 192.168.1.10
+[2025-12-19T18:00:30.446Z] [sender] ⚠ ENCRYPTION MODE CHANGED: 0 → 1
+[2025-12-19T18:00:30.447Z] [sender] ⚠ Closing current connection due to security mode change. Please reconnect with updated settings.
+[2025-12-19T18:00:30.450Z] [sender] Background receive error: Premature close
+[2025-12-19T18:00:32.100Z] [sender] Received encryption change broadcast: mode=0, kx=psk from receiver at 192.168.1.10
+[2025-12-19T18:00:35.110Z] [sender] Received encryption change broadcast: mode=0, kx=psk from receiver at 192.168.1.10
+[2025-12-19T18:00:38.133Z] [sender] Received encryption change broadcast: mode=0, kx=psk from receiver at 192.168.1.10
+[2025-12-19T18:00:38.964Z] [sender] Received encryption change broadcast: mode=1, kx=psk from receiver at 192.168.1.10
+[2025-12-19T18:00:38.966Z] [sender] Received encryption change broadcast: mode=1, kx=psk from receiver at 192.168.1.10
+[2025-12-19T18:00:41.143Z] [sender] Received encryption change broadcast: mode=1, kx=psk from receiver at 192.168.1.10
+[2025-12-19T18:00:41.916Z] [sender] Received encryption change broadcast: mode=1, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:00:41.920Z] [sender] Received encryption change broadcast: mode=1, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:00:44.148Z] [sender] Received encryption change broadcast: mode=1, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:00:45.941Z] [sender] Received encryption change broadcast: mode=1, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:00:47.161Z] [sender] Received encryption change broadcast: mode=1, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:00:49.267Z] [sender] Security config updated: PSK updated
+[2025-12-19T18:00:49.268Z] [sender] ⚠ Security settings updated. New connections will use the updated settings.
+[2025-12-19T18:00:50.171Z] [sender] Received encryption change broadcast: mode=1, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:00:50.599Z] [sender] ⚠ KEY EXCHANGE MODE CHANGED: psk → rsa
+[2025-12-19T18:00:50.599Z] [sender] ⚠ Security settings updated. New connections will use the updated settings.
+[2025-12-19T18:00:52.491Z] [sender] Updated encryption mode to 1 from connect config
+[2025-12-19T18:00:52.492Z] [sender] Connecting with encryption mode: 1, KX mode: rsa
+[2025-12-19T18:00:52.497Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T18:00:52.620Z] [sender] Handshake complete, ready to send data
+[2025-12-19T18:00:53.178Z] [sender] Received encryption change broadcast: mode=1, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:00:56.194Z] [sender] Received encryption change broadcast: mode=1, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:00:56.982Z] [sender] SENT: hi
+[2025-12-19T18:00:59.204Z] [sender] Received encryption change broadcast: mode=1, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:01:02.213Z] [sender] Received encryption change broadcast: mode=1, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:01:05.222Z] [sender] Received encryption change broadcast: mode=1, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:01:08.232Z] [sender] Received encryption change broadcast: mode=1, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:01:09.461Z] [sender] Received encryption change broadcast: mode=1, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:01:11.239Z] [sender] Received encryption change broadcast: mode=1, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:01:12.678Z] [sender] SENT: hi
+[2025-12-19T18:01:14.247Z] [sender] Received encryption change broadcast: mode=1, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:01:17.258Z] [sender] Received encryption change broadcast: mode=1, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:01:20.268Z] [sender] Received encryption change broadcast: mode=1, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:01:20.795Z] [sender] SENT: hello
+[2025-12-19T18:01:23.277Z] [sender] Received encryption change broadcast: mode=1, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:01:26.294Z] [sender] Received encryption change broadcast: mode=1, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:01:27.224Z] [sender] Received encryption change broadcast: mode=1, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:01:29.313Z] [sender] Received encryption change broadcast: mode=1, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:01:32.035Z] [sender] SENT: hi
+[2025-12-19T18:01:32.304Z] [sender] Received encryption change broadcast: mode=1, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:01:35.307Z] [sender] Received encryption change broadcast: mode=1, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:01:38.308Z] [sender] Received encryption change broadcast: mode=1, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:01:38.469Z] [sender] ⚠ ENCRYPTION MODE CHANGED: 1 → 2
+[2025-12-19T18:01:38.469Z] [sender] ⚠ Closing current connection due to security mode change. Please reconnect with updated settings.
+[2025-12-19T18:01:41.315Z] [sender] Received encryption change broadcast: mode=1, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:01:44.322Z] [sender] Received encryption change broadcast: mode=1, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:01:45.075Z] [sender] Received encryption change broadcast: mode=2, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:01:45.078Z] [sender] Received encryption change broadcast: mode=2, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:01:47.330Z] [sender] Received encryption change broadcast: mode=2, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:01:49.251Z] [sender] Updated encryption mode to 2 from connect config
+[2025-12-19T18:01:49.252Z] [sender] Connecting with encryption mode: 2, KX mode: rsa
+[2025-12-19T18:01:49.258Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T18:01:49.342Z] [sender] Handshake complete, ready to send data
+[2025-12-19T18:01:50.330Z] [sender] Received encryption change broadcast: mode=2, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:01:53.340Z] [sender] Received encryption change broadcast: mode=2, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:01:56.231Z] [sender] SENT: hello
+[2025-12-19T18:01:56.345Z] [sender] Received encryption change broadcast: mode=2, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:01:59.357Z] [sender] Received encryption change broadcast: mode=2, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:02:02.363Z] [sender] Received encryption change broadcast: mode=2, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:02:05.367Z] [sender] Received encryption change broadcast: mode=2, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:02:08.373Z] [sender] Received encryption change broadcast: mode=2, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:02:11.379Z] [sender] Received encryption change broadcast: mode=2, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:02:14.383Z] [sender] Received encryption change broadcast: mode=2, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:02:17.399Z] [sender] Received encryption change broadcast: mode=2, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:02:20.406Z] [sender] Received encryption change broadcast: mode=2, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:02:23.411Z] [sender] Received encryption change broadcast: mode=2, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:02:26.416Z] [sender] Received encryption change broadcast: mode=2, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:02:29.425Z] [sender] Received encryption change broadcast: mode=2, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:02:32.431Z] [sender] Received encryption change broadcast: mode=2, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:02:35.436Z] [sender] Received encryption change broadcast: mode=2, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:02:38.447Z] [sender] Received encryption change broadcast: mode=2, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:02:41.447Z] [sender] Received encryption change broadcast: mode=2, kx=rsa from receiver at 192.168.1.10
+[2025-12-19T18:02:44.172Z] [sender] Background receive error: read ECONNRESET

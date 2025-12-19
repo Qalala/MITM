@@ -52,6 +52,11 @@ wss.on("connection", (ws) => {
       clearInterval(broadcastInterval);
       broadcastInterval = null;
     }
+    // Remove encryption change callback
+    if (ws.encChangeCallback && discovery && discovery.offEncryptionChange) {
+      discovery.offEncryptionChange(ws.encChangeCallback);
+      ws.encChangeCallback = null;
+    }
   });
 
   ws.on("message", async (data) => {
@@ -85,37 +90,55 @@ wss.on("connection", (ws) => {
             discovery = startDiscovery(currentRole, port);
           }
           
+          // Store previous encryption change callback to remove it
+          if (ws.encChangeCallback && discovery && discovery.offEncryptionChange) {
+            discovery.offEncryptionChange(ws.encChangeCallback);
+            ws.encChangeCallback = null;
+          }
+          
           if (currentRole === "sender") {
             roleInstance = createSender(cfg, ws);
             
-            // Register callback for encryption change notifications from receiver
+            // Register callback for encryption change notifications from receiver (only once)
             if (discovery && discovery.onEncryptionChange) {
-              discovery.onEncryptionChange((encChange) => {
-                // When receiver changes encryption mode, notify sender
+              ws.encChangeCallback = (encChange) => {
+                // When receiver changes encryption mode, notify sender (only once per change)
                 if (encChange.fromRole === "receiver") {
-                  log("sender", `Received encryption change broadcast: mode=${encChange.encMode}, kx=${encChange.kxMode} from receiver at ${encChange.fromIp}`);
-                  ws.send(JSON.stringify({
-                    type: "log",
-                    message: `⚠ Receiver at ${encChange.fromIp} changed decryption mode to ${encChange.encMode} (KX: ${encChange.kxMode}). Update your encryption mode to match if you want to connect.`
-                  }));
+                  // Check if we've already notified about this change
+                  const changeKey = `encChange_${encChange.fromIp}_${encChange.encMode}_${encChange.kxMode}`;
+                  if (!ws.lastEncChange || ws.lastEncChange !== changeKey) {
+                    ws.lastEncChange = changeKey;
+                    log("sender", `Received encryption change broadcast: mode=${encChange.encMode}, kx=${encChange.kxMode} from receiver at ${encChange.fromIp}`);
+                    ws.send(JSON.stringify({
+                      type: "log",
+                      message: `⚠ Receiver at ${encChange.fromIp} changed decryption mode to ${encChange.encMode} (KX: ${encChange.kxMode}). Update your encryption mode to match if you want to connect.`
+                    }));
+                  }
                 }
-              });
+              };
+              discovery.onEncryptionChange(ws.encChangeCallback);
             }
           } else if (currentRole === "receiver") {
             roleInstance = createReceiver(cfg, ws);
             
-            // Register callback for encryption change notifications from sender
+            // Register callback for encryption change notifications from sender (only once)
             if (discovery && discovery.onEncryptionChange) {
-              discovery.onEncryptionChange((encChange) => {
-                // When sender changes encryption mode, notify receiver
+              ws.encChangeCallback = (encChange) => {
+                // When sender changes encryption mode, notify receiver (only once per change)
                 if (encChange.fromRole === "sender") {
-                  log("receiver", `Received encryption change broadcast: mode=${encChange.encMode}, kx=${encChange.kxMode} from sender at ${encChange.fromIp}`);
-                  ws.send(JSON.stringify({
-                    type: "log",
-                    message: `⚠ Sender at ${encChange.fromIp} changed encryption mode to ${encChange.encMode} (KX: ${encChange.kxMode}). Update your decryption mode to match if you want to accept connections.`
-                  }));
+                  // Check if we've already notified about this change
+                  const changeKey = `encChange_${encChange.fromIp}_${encChange.encMode}_${encChange.kxMode}`;
+                  if (!ws.lastEncChange || ws.lastEncChange !== changeKey) {
+                    ws.lastEncChange = changeKey;
+                    log("receiver", `Received encryption change broadcast: mode=${encChange.encMode}, kx=${encChange.kxMode} from sender at ${encChange.fromIp}`);
+                    ws.send(JSON.stringify({
+                      type: "log",
+                      message: `⚠ Sender at ${encChange.fromIp} changed encryption mode to ${encChange.encMode} (KX: ${encChange.kxMode}). Update your decryption mode to match if you want to accept connections.`
+                    }));
+                  }
                 }
-              });
+              };
+              discovery.onEncryptionChange(ws.encChangeCallback);
             }
           } else if (currentRole === "attacker") {
             roleInstance = createAttacker(cfg, ws);
@@ -274,14 +297,6 @@ wss.on("connection", (ws) => {
           if (roleInstance && roleInstance.updateSecurityConfig) {
             await roleInstance.updateSecurityConfig(cfg);
             ws.send(JSON.stringify({ type: "status", status: `Security settings updated for ${currentRole}` }));
-            
-            // For receiver, also send a warning message to UI
-            if (currentRole === "receiver") {
-              ws.send(JSON.stringify({ 
-                type: "log", 
-                message: "⚠ Decryption mode changed. Sender must reconnect with matching encryption mode." 
-              }));
-            }
           } else if (roleInstance) {
             // If updateSecurityConfig is not available, recreate the instance with new config
             // This is a fallback for roles that don't support dynamic updates
