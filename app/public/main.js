@@ -54,6 +54,12 @@ function showRoleSections(role) {
     document.getElementById("chat-input-row").style.display = "flex";
     // Show Connect button for sender
     connectBtn.style.display = "inline-block";
+    // Show Target IP field for sender
+    const targetIpInput = document.getElementById("target-ip");
+    const targetIpLabel = targetIpInput?.parentElement;
+    if (targetIpLabel) {
+      targetIpLabel.style.display = "flex";
+    }
   } else if (role === "receiver") {
     document.getElementById("network-section").style.display = "block";
     document.getElementById("receiver-security-section").style.display = "block";
@@ -62,6 +68,16 @@ function showRoleSections(role) {
     document.getElementById("chat-input-row").style.display = "none";
     // Hide Connect button for receiver (it listens, doesn't connect)
     connectBtn.style.display = "none";
+    // Hide/disable Target IP field for receiver - receiver doesn't connect to anything
+    const targetIpInput = document.getElementById("target-ip");
+    const targetIpLabel = targetIpInput?.parentElement;
+    if (targetIpLabel) {
+      targetIpLabel.style.display = "none";
+    }
+    // Clear any value in target IP field for receiver
+    if (targetIpInput) {
+      targetIpInput.value = "";
+    }
   } else if (role === "attacker") {
     document.getElementById("network-section").style.display = "block";
     // Attacker doesn't need security section - it just relays frames without decrypting
@@ -72,6 +88,12 @@ function showRoleSections(role) {
     document.getElementById("chat-input-row").style.display = "none";
     // Hide Connect button for attacker
     connectBtn.style.display = "none";
+    // Show Target IP field for attacker (it's used for victim's IP)
+    const targetIpInput = document.getElementById("target-ip");
+    const targetIpLabel = targetIpInput?.parentElement;
+    if (targetIpLabel) {
+      targetIpLabel.style.display = "flex";
+    }
   }
 }
 
