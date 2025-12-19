@@ -60,9 +60,13 @@ tests/
   - When Sender connects, Attacker opens its own TCP connection to real Receiver at `<receiver IP>:12347`.
   - Relays frames bidirectionally while optionally applying chosen attack mode (drop/delay/modify/replay/downgrade).
 
-### Encryption modes
+### Encryption modes and UI behavior
 
-The UI lets you select the mode for Sender. For Receiver, you select which decryption methods are supported via checkboxes. The Receiver will accept connections from Senders using any encryption mode that the Receiver supports. Downgrade attacks are prevented by:
+The UI dynamically shows/hides fields based on the selected encryption mode:
+- **Plaintext mode (0)**: Only the encryption mode dropdown is shown. Key exchange and PSK fields are hidden.
+- **Encrypted modes (1-3)**: Key exchange dropdown and PSK field are shown. PSK is required when using PSK key exchange.
+
+For Sender, you select the encryption mode. For Receiver, you select the decryption method. The Receiver will accept connections from Senders using any encryption mode that the Receiver supports. Downgrade attacks are prevented by:
 - Including the selected mode in the HELLO and NEGOTIATE transcript and requiring the mode to be in the Receiver's supported list.
 - Receiver will send `ERROR` and close if the Sender's mode is not in the Receiver's supported decryption methods.
 
@@ -72,6 +76,7 @@ Supported modes:
   - No encryption, no integrity.
   - `DATA` payload: JSON `{ "text": "..." }`.
   - Demonstrates how easily MITM can read and modify messages.
+  - **UI Note**: When plaintext mode is selected, key exchange and PSK fields are automatically hidden.
 
 - **Mode 1 – AES‑256‑GCM (AEAD, recommended)**
   - Symmetric AES‑256‑GCM with integrity.
@@ -110,8 +115,16 @@ The attacker never sees keys or decrypted payloads in secure modes (except in DH
 
 - Uses UDP broadcast on a separate discovery port.
 - Receivers/Attackers broadcast presence including role and port.
-- Sender can click **“Auto discover”** to send a probe and see a list of discovered peers.
+- Sender can click **"Auto discover"** to send a probe and see a list of discovered peers.
 - If discovery fails (e.g. Wi‑Fi blocks broadcast), you can manually type IP/port.
+
+### Ciphertext display
+
+When using encrypted modes (AES-GCM, AES-CBC+HMAC, Diffie-Hellman), the chat log displays both:
+- **Ciphertext** (first 64 characters with truncation indicator): The encrypted message as transmitted over the network.
+- **Plaintext**: The decrypted message content.
+
+For plaintext mode, only the plaintext is shown. This helps visualize the difference between encrypted and unencrypted communication.
 
 ---
 
@@ -121,9 +134,8 @@ The attacker never sees keys or decrypted payloads in secure modes (except in DH
 
 - Node.js 18+ (for built‑in `node --test` and modern `crypto` APIs).
 - All devices must be on the **same Wi‑Fi / LAN**.
-- On Android, you can use **Termux**:
-  - Install Node: `pkg install nodejs`
-  - Clone/copy this repo into Termux storage.
+- On Android, you can use **Termux** (see detailed setup below).
+- Optional: Python 3 with pip (for Python crypto utilities, auto-installed if needed).
 
 ### Install dependencies
 
@@ -274,8 +286,8 @@ This uses UDP `SO_BROADCAST` to send AES‑GCM encrypted broadcast messages to `
   - Manually enter IP/port in the Sender UI.
 
 - **Mobile issues (Android/iOS)**
-  - On Android, confirm Termux has network permissions.
-  - On iOS, you generally cannot run a long‑lived TCP server app in the background; use a laptop or Android device as Receiver/Attacker and use the iOS device as a UI client (Sender or control UI).
+  - On Android: See detailed Termux setup instructions below. Confirm Termux has network permissions.
+  - On iOS: You generally cannot run a long‑lived TCP server app in the background; use a laptop or Android device as Receiver/Attacker and use the iOS device as a UI client (Sender or control UI). Simply open `http://<server-ip>:3000/` in Safari/Chrome.
 
 - **MITM appears ineffective in secure modes**
   - That’s expected: AES‑GCM and AES‑CBC+HMAC are designed to prevent undetected tampering.
@@ -283,13 +295,116 @@ This uses UDP `SO_BROADCAST` to send AES‑GCM encrypted broadcast messages to `
 
 ---
 
+## Android Setup (Termux)
+
+### Initial Setup
+
+1. **Install Termux**
+   - Download from [F-Droid](https://f-droid.org/packages/com.termux/) or [GitHub releases](https://github.com/termux/termux-app/releases)
+   - Avoid Google Play version (often outdated)
+
+2. **Update packages**
+   ```bash
+   pkg update && pkg upgrade
+   ```
+
+3. **Install Node.js**
+   ```bash
+   pkg install nodejs
+   ```
+
+4. **Install Git (if not already installed)**
+   ```bash
+   pkg install git
+   ```
+
+5. **Clone the repository**
+   ```bash
+   cd ~
+   git clone https://github.com/yourusername/lan-secure-chat-mitm-demo.git
+   cd lan-secure-chat-mitm-demo
+   ```
+   > Replace `yourusername` with the actual GitHub username/organization.
+
+6. **Install Python and pip (optional, for Python crypto utilities)**
+   ```bash
+   pkg install python
+   # pip should be included, verify with:
+   python -m pip --version
+   # If not available:
+   pkg install python-pip
+   ```
+
+7. **Install project dependencies**
+   ```bash
+   npm install
+   ```
+
+### Running on Android
+
+1. **Start the server**
+   ```bash
+   npm start
+   ```
+
+2. **Find your Android IP address**
+   - In Termux: `ifconfig` or `ip addr show`
+   - Or check Wi-Fi settings on your Android device
+
+3. **Open in browser**
+   - On the same Android device: `http://localhost:3000/`
+   - From other devices: `http://<android-ip>:3000/`
+
+### Updating the Repository
+
+When updates are available:
+
+1. **Navigate to project directory**
+   ```bash
+   cd ~/lan-secure-chat-mitm-demo
+   ```
+
+2. **Pull latest changes**
+   ```bash
+   git pull origin main
+   ```
+   > If you've made local changes, you may need to stash or commit them first:
+   > ```bash
+   > git stash  # Save local changes
+   > git pull origin main
+   > git stash pop  # Restore local changes
+   > ```
+
+3. **Update dependencies (if package.json changed)**
+   ```bash
+   npm install
+   ```
+
+4. **Restart the server**
+   ```bash
+   npm start
+   ```
+
+### iOS Connection
+
+iOS devices connect as browser clients:
+
+1. **Start server on laptop or Android** (follow setup instructions above)
+2. **Find the server's IP address** (shown in terminal or network settings)
+3. **On iOS device**, open Safari or Chrome
+4. **Navigate to**: `http://<server-ip>:3000/`
+5. **Select role** and use the UI normally
+
+The iOS device acts as a client - all TCP socket operations run on the server device.
+
 ## Security notes
 
-- Uses **Node’s crypto** primitives only (no custom crypto).
+- Uses **Node's crypto** primitives only (no custom crypto).
 - RSA uses **OAEP** padding.
 - AES‑GCM nonces are random per message; sequence numbers are included in AAD for replay detection.
 - AES‑CBC+HMAC uses encrypt‑then‑MAC, with constant‑time MAC verification before decryption.
 - Downgrade attacks are prevented by enforcing matching negotiated modes; HELLO modifications are detected by Receivers.
 - Attacker never sees keys or plaintext for secure modes, illustrating confidentiality and integrity under active attack.
+- **PSK Requirements**: Pre-shared keys are only required when using PSK key exchange with encrypted modes (modes 1-3). For plaintext mode or RSA/DH key exchange, PSK is not used.
 
 

@@ -865,25 +865,31 @@ function updatePskRequiredIndicator() {
       senderPskLabel.style.display = isPlaintext ? "none" : "block";
     }
     
-    if (!isPlaintext && senderKxMode && senderPskIndicator) {
+    // Update PSK requirements based on key exchange mode (only for encrypted modes)
+    if (!isPlaintext && senderKxMode) {
       const kxMode = senderKxMode.value;
-      const isRequired = kxMode === "psk"; // Required for PSK key exchange with encrypted modes
+      const isRequired = kxMode === "psk"; // Required only for PSK key exchange
       
-      if (isRequired) {
-        senderPskIndicator.style.display = "inline";
-        senderPskIndicator.textContent = "⚠ REQUIRED for PSK key exchange";
-        if (senderPskInput) {
-          senderPskInput.required = true;
-          senderPskInput.style.borderColor = senderPskInput.value ? "" : "#ff6b6b";
+      if (senderPskIndicator) {
+        if (isRequired) {
+          senderPskIndicator.style.display = "inline";
+          senderPskIndicator.textContent = "⚠ REQUIRED for PSK key exchange";
+        } else {
+          senderPskIndicator.style.display = "none";
         }
-      } else {
-        senderPskIndicator.style.display = "none";
-        if (senderPskInput) {
-          senderPskInput.required = false;
+      }
+      
+      if (senderPskInput) {
+        senderPskInput.required = isRequired;
+        // Update border color based on requirement and value
+        if (isRequired && !senderPskInput.value) {
+          senderPskInput.style.borderColor = "#ff6b6b";
+        } else {
           senderPskInput.style.borderColor = "";
         }
       }
-    } else {
+    } else if (isPlaintext) {
+      // For plaintext mode, hide indicator and clear requirements
       if (senderPskIndicator) {
         senderPskIndicator.style.display = "none";
       }
@@ -907,25 +913,31 @@ function updatePskRequiredIndicator() {
       receiverPskLabel.style.display = isPlaintext ? "none" : "block";
     }
     
-    if (!isPlaintext && receiverKxMode && receiverPskIndicator) {
+    // Update PSK requirements based on key exchange mode (only for encrypted modes)
+    if (!isPlaintext && receiverKxMode) {
       const kxMode = receiverKxMode.value;
-      const isRequired = kxMode === "psk"; // Required for PSK key exchange with encrypted modes
+      const isRequired = kxMode === "psk"; // Required only for PSK key exchange
       
-      if (isRequired) {
-        receiverPskIndicator.style.display = "inline";
-        receiverPskIndicator.textContent = "⚠ REQUIRED for PSK key exchange";
-        if (receiverPskInput) {
-          receiverPskInput.required = true;
-          receiverPskInput.style.borderColor = receiverPskInput.value ? "" : "#ff6b6b";
+      if (receiverPskIndicator) {
+        if (isRequired) {
+          receiverPskIndicator.style.display = "inline";
+          receiverPskIndicator.textContent = "⚠ REQUIRED for PSK key exchange";
+        } else {
+          receiverPskIndicator.style.display = "none";
         }
-      } else {
-        receiverPskIndicator.style.display = "none";
-        if (receiverPskInput) {
-          receiverPskInput.required = false;
+      }
+      
+      if (receiverPskInput) {
+        receiverPskInput.required = isRequired;
+        // Update border color based on requirement and value
+        if (isRequired && !receiverPskInput.value) {
+          receiverPskInput.style.borderColor = "#ff6b6b";
+        } else {
           receiverPskInput.style.borderColor = "";
         }
       }
-    } else {
+    } else if (isPlaintext) {
+      // For plaintext mode, hide indicator and clear requirements
       if (receiverPskIndicator) {
         receiverPskIndicator.style.display = "none";
       }

@@ -15,7 +15,8 @@ TABLE OF CONTENTS
 5. Attacker (MITM) Role - Complete Guide
 6. Common Workflows
 7. Troubleshooting
-8. Termux Maintenance Commands (Android)
+8. Android Setup (Termux) - Complete Guide
+9. iOS Connection Guide
 
 ================================================================================
 1. GETTING STARTED
@@ -158,31 +159,38 @@ Components:
 
 - Key Exchange Dropdown (#kx-mode)
   * Purpose: Select key exchange method
+  * Visibility: ONLY shown when Encryption Mode is NOT plaintext (modes 1-3)
   * Options:
     - Pre-shared key (psk)
       * Both Sender and Receiver use same password/key
       * Usage: Enter the same PSK in both Sender and Receiver
       * Best for: Simple setups, testing
+      * Requires: PSK input field (shown with required indicator)
     
     - RSA
       * Receiver generates RSA key pair, sends public key
       * Sender encrypts session key with public key
       * Best for: Secure key exchange without pre-shared secret
+      * Requires: No PSK needed
     
     - Diffie-Hellman (dh)
       * Both parties exchange DH public keys
       * Shared secret derived from DH exchange
       * Best for: Learning about DH key exchange
+      * Requires: No PSK needed
   * Usage: Select method that matches Receiver
   * Required: Must match Receiver exactly
+  * Note: When plaintext mode (0) is selected, this field is automatically hidden
 
 - Pre-shared Key Input (#psk-input)
-  * Purpose: Enter shared password/key (when using PSK mode)
+  * Purpose: Enter shared password/key (when using PSK key exchange)
   * Format: Any text string
   * Usage: Type the same key that Receiver has entered
-  * Required: Only when Key Exchange = "Pre-shared key"
+  * Visibility: ONLY shown when Encryption Mode is NOT plaintext (modes 1-3)
+  * Required: Only when Key Exchange = "Pre-shared key (psk)" AND using encrypted modes (1-3)
   * Example: "my-secret-key-123"
   * Warning: Must match Receiver's PSK exactly
+  * Note: When plaintext mode (0) is selected, this field is automatically hidden
 
 - Demo Mode Checkbox (#demo-mode)
   * Purpose: Enable verbose logging for educational purposes
@@ -204,6 +212,11 @@ Components:
     - System logs in default color
     - Errors in red
     - Attack notifications in orange/red
+  * Encrypted Messages Display:
+    - Shows ciphertext first (truncated to first 64 chars): "→ SENT (ciphertext): <base64>..."
+    - Then shows plaintext: "→ SENT (plaintext): Hello"
+  * Plaintext Messages Display:
+    - Shows only plaintext: "→ SENT: Hello"
   * Usage: Monitor connection status and messages here
   * Auto-scrolls: Yes, automatically scrolls to latest message
 
@@ -288,11 +301,13 @@ Components:
     - 0 - Plaintext (No encryption)
       * Use for: Testing, demonstrating MITM attacks
       * Note: Sender must also use Encryption Mode 0
+      * UI Behavior: When selected, Key Exchange and PSK fields are automatically hidden
     
     - 1 - AES-GCM Decryption
       * Use for: Secure communication (recommended)
       * Features: Decrypts and verifies integrity of AES-GCM messages
       * Note: Sender must also use Encryption Mode 1
+      * UI Behavior: When selected, Key Exchange and PSK fields are shown
     
     - 2 - AES-CBC + HMAC-SHA256 Decryption
       * Use for: Secure communication with encrypt-then-MAC
@@ -307,15 +322,20 @@ Components:
   * Example: If receiver selects Mode 1, only senders using Encryption Mode 1 can connect
 
 - Key Exchange (#receiver-kx-mode)
+  * Visibility: ONLY shown when Decryption Mode is NOT plaintext (modes 1-3)
   * CRITICAL: Must match Sender's key exchange method
   * Usage: Select same method as Sender
-  * Options: Pre-shared key, RSA, Diffie-Hellman
+  * Options: Pre-shared key (psk), RSA, Diffie-Hellman (dh)
+  * Note: When plaintext mode (0) is selected, this field is automatically hidden
 
 - Pre-shared Key (#receiver-psk-input)
+  * Visibility: ONLY shown when Decryption Mode is NOT plaintext (modes 1-3)
   * CRITICAL: Must match Sender's PSK exactly
   * Usage: Enter exactly the same key as Sender
   * Example: If Sender uses "demo-psk", Receiver must also use "demo-psk"
-  * Required: Only when Key Exchange = "Pre-shared key"
+  * Required: Only when Key Exchange = "Pre-shared key (psk)" AND using encrypted modes (1-3)
+  * Indicator: Shows "⚠ REQUIRED for PSK key exchange" when required
+  * Note: When plaintext mode (0) is selected, this field is automatically hidden
 
 - Demo Mode (#receiver-demo-mode)
   * Purpose: Enable verbose logging for educational purposes
@@ -327,6 +347,11 @@ C. CHAT SECTION
   * Purpose: Shows received messages and system logs
   * Format:
     - Received messages: "← RECEIVED: message" (green)
+  * Encrypted Messages Display:
+    - Shows ciphertext first (truncated): "← RECEIVED (ciphertext): <base64>..."
+    - Then shows plaintext: "← RECEIVED (plaintext): Hello"
+  * Plaintext Messages Display:
+    - Shows only plaintext: "← RECEIVED: Hello"
     - Attack success: "⚠ ATTACK SUCCESS: message was modified" (red)
     - Attack failures: "✗ ATTACK FAILED: reason" (orange)
     - System logs: Default color
@@ -718,9 +743,93 @@ SOLUTION:
 - If Sender/Receiver see hex, check Encryption Mode settings
 
 ================================================================================
-8. TERMUX MAINTENANCE COMMANDS (ANDROID)
+9. iOS CONNECTION GUIDE
 ================================================================================
 
+iOS devices connect as browser clients (they do NOT run the Node server):
+
+SETUP:
+------
+1. Start server on laptop or Android device
+   - Follow setup instructions in previous sections
+   - Note the server's IP address from terminal output
+
+2. On iOS device:
+   - Open Safari or Chrome
+   - Navigate to: http://<server-ip>:3000/
+   - Example: http://192.168.1.20:3000/
+
+3. Select role and use the UI normally
+   - iOS device acts as Sender/Receiver/Attacker via browser
+   - All TCP socket operations run on the server device
+
+NOTES:
+------
+- iOS Safari may require explicit permission for WebSocket connections
+- If connection issues occur, check browser console for errors
+- iOS devices cannot run long-lived TCP servers (use laptop/Android as server)
+- You can use iOS purely as a UI client for any role
+
+================================================================================
+8. ANDROID SETUP (TERMUX) - COMPLETE GUIDE
+================================================================================
+
+INITIAL SETUP:
+--------------
+1. Install Termux
+   - Download from F-Droid: https://f-droid.org/packages/com.termux/
+   - Or GitHub releases: https://github.com/termux/termux-app/releases
+   - AVOID Google Play version (often outdated)
+
+2. Update Termux packages
+   pkg update && pkg upgrade
+
+3. Install Node.js
+   pkg install nodejs
+
+4. Install Git
+   pkg install git
+
+5. Clone the repository
+   cd ~
+   git clone https://github.com/yourusername/lan-secure-chat-mitm-demo.git
+   cd lan-secure-chat-mitm-demo
+   (Replace 'yourusername' with actual GitHub username/organization)
+
+6. Install Python and pip (optional, for Python crypto utilities)
+   pkg install python
+   # Verify pip is available:
+   python -m pip --version
+   # If not available:
+   pkg install python-pip
+
+7. Install project dependencies
+   npm install
+
+RUNNING THE SERVER:
+-------------------
+1. Start the server
+   npm start
+
+2. Find your Android IP address
+   - In Termux: ifconfig
+   - Or: ip addr show
+   - Or check Wi-Fi settings on Android device
+
+3. Open in browser
+   - On Android: http://localhost:3000/
+   - From other devices: http://<android-ip>:3000/
+
+MANAGING UPDATES:
+-----------------
+- Check for updates regularly: git pull origin main
+- Always run npm install after pulling if package.json changed
+- Check Termux packages: pkg list-upgradable
+- Update Termux packages: pkg upgrade
+- Update Node.js: pkg install nodejs (if newer version available)
+
+TERMUX MAINTENANCE COMMANDS:
+----------------------------
 This section provides essential Termux commands for maintaining the repository
 on Android devices, especially when dealing with frequent updates.
 

@@ -58,39 +58,93 @@ You can repeat steps 2–4 on **other laptops** if you want multiple machines ea
 
 On Android you can run the **backend** in Termux and the **UI** in the mobile browser.
 
-1. Install **Termux** from a trusted source.
-2. In Termux, install Node:
+#### Initial Setup
 
-```bash
-pkg install nodejs
-```
+1. **Install Termux**
+   - Download from [F-Droid](https://f-droid.org/packages/com.termux/) or [GitHub releases](https://github.com/termux/termux-app/releases)
+   - Avoid Google Play version (often outdated)
 
-3. Clone/copy the project into Termux’s storage and `cd` into it:
+2. **Update packages**
+   ```bash
+   pkg update && pkg upgrade
+   ```
 
-```bash
-cd /path/to/lan-secure-chat-mitm-demo
-```
+3. **Install Node.js**
+   ```bash
+   pkg install nodejs
+   ```
 
-4. Install dependencies:
+4. **Install Git** (if not already installed)
+   ```bash
+   pkg install git
+   ```
 
-```bash
-npm install
-```
+5. **Clone the repository**
+   ```bash
+   cd ~
+   git clone https://github.com/yourusername/lan-secure-chat-mitm-demo.git
+   cd lan-secure-chat-mitm-demo
+   ```
+   > Replace `yourusername` with the actual GitHub username/organization.
 
-5. Start the server:
+6. **Install Python and pip (optional, for Python crypto utilities)**
+   ```bash
+   pkg install python
+   # Verify pip is available:
+   python -m pip --version
+   # If not available:
+   pkg install python-pip
+   ```
 
-```bash
-npm start
-```
+7. **Install project dependencies**
+   ```bash
+   npm install
+   ```
 
-6. Find the Android device’s **Wi‑Fi IP address** (e.g. in system Wi‑Fi details).
-7. In the Android browser (Chrome/Firefox), open:
+#### Running the Server
 
-```text
-http://<android-ip>:3000/
-```
+1. Start the server:
+   ```bash
+   npm start
+   ```
 
-You can also open that URL from **other devices** on the same LAN (laptops, other phones).
+2. Find the Android device's **Wi‑Fi IP address**:
+   - In Termux: `ifconfig` or `ip addr show`
+   - Or check system Wi‑Fi settings on Android
+
+3. Open in browser:
+   - On Android: `http://localhost:3000/`
+   - From other devices: `http://<android-ip>:3000/`
+
+#### Updating the Repository
+
+When updates are available:
+
+1. Navigate to project directory:
+   ```bash
+   cd ~/lan-secure-chat-mitm-demo
+   ```
+
+2. Pull latest changes:
+   ```bash
+   git pull origin main
+   ```
+   > If you have local changes:
+   > ```bash
+   > git stash  # Save local changes
+   > git pull origin main
+   > git stash pop  # Restore local changes
+   > ```
+
+3. Update dependencies (if package.json changed):
+   ```bash
+   npm install
+   ```
+
+4. Restart the server:
+   ```bash
+   npm start
+   ```
 
 > **Note:** Android can also be used purely as a UI client by pointing its browser at a server running on a laptop instead.
 
@@ -98,17 +152,21 @@ You can also open that URL from **other devices** on the same LAN (laptops, othe
 
 ### 1.4. iOS (iPhone / iPad)
 
-On iOS you usually **do not run the Node server**; instead you use it **as a browser client**.
+On iOS you **do not run the Node server**; instead you use it **as a browser client**.
 
-1. Run `npm install` and `npm start` on a **laptop or Android device** as described above.
-2. Find that server device’s **IP address**.
-3. On the iOS device, open Safari/Chrome and visit:
+1. **Start server on laptop or Android** (follow setup instructions above)
+2. **Find the server's IP address**:
+   - Check terminal output where `npm start` was run
+   - Or check network settings on the server device
+3. **On iOS device**:
+   - Open Safari or Chrome
+   - Navigate to: `http://<server-ip>:3000/`
+   - Example: `http://192.168.1.20:3000/`
+4. **Select role** and use the UI normally
 
-```text
-http://<server-ip>:3000/
-```
+The iOS device acts as a **Sender / Receiver / Attacker** via the browser UI, while the actual TCP sockets run on the server device (laptop or Android).
 
-The iOS device can now act as **Sender / Receiver / Attacker** via the browser UI, while the actual TCP sockets run on the server device.
+**Note**: iOS Safari may require explicit permission for WebSocket connections. If you see connection issues, check browser console for errors.
 
 ---
 
@@ -136,30 +194,41 @@ Open `http://<server-ip>:3000/` in a browser. **On first launch, only the role s
 
 - **3. Security** (appears for Sender after setting role)
   - `Encryption mode` (`#enc-mode`):
-    - **0 – None (Plaintext)**
-    - **1 – AES‑GCM**
-    - **2 – AES‑CBC + HMAC‑SHA256**
-    - **3 – Diffie‑Hellman (demo)**
-  - `Key exchange` (`#kx-mode`):
-    - **Pre‑shared key (psk)**
-    - **RSA**
-    - **Diffie‑Hellman (dh)**
-  - `Pre‑shared key` (`#psk-input`): used when `psk` is chosen.
+    - **0 – None (Plaintext)**: Key exchange and PSK fields are **hidden**
+    - **1 – AES‑GCM**: Key exchange and PSK fields are **shown**
+    - **2 – AES‑CBC + HMAC‑SHA256**: Key exchange and PSK fields are **shown**
+    - **3 – Diffie‑Hellman (demo)**: Key exchange and PSK fields are **shown**
+  - `Key exchange` (`#kx-mode`): **Only shown for encrypted modes (1-3)**
+    - **Pre‑shared key (psk)**: Requires PSK input
+    - **RSA**: No PSK needed
+    - **Diffie‑Hellman (dh)**: No PSK needed
+  - `Pre‑shared key` (`#psk-input`): **Only shown for encrypted modes (1-3)**
+    - **Required** when Key exchange = "Pre‑shared key (psk)"
+    - Shows indicator "⚠ REQUIRED for PSK key exchange" when required
+    - Not needed for RSA or DH key exchange
   - `Demo mode` (`#demo-mode`): enables more verbose logging/steps.
 
-- **3. Decryption Capabilities** (appears for Receiver after setting role)
-  - Checkboxes to select which decryption methods the receiver supports:
-    - **Plaintext (No encryption) – Mode 0**
-    - **AES-GCM Decryption – Mode 1**
-    - **AES-CBC + HMAC-SHA256 Decryption – Mode 2**
-    - **Diffie-Hellman Decryption – Mode 3**
-  - The receiver will accept connections from senders using any of the selected encryption modes.
-  - `Key exchange` (`#receiver-kx-mode`): must match the sender's key exchange method.
-  - `Pre‑shared key` (`#receiver-psk-input`): must match the sender's PSK exactly.
+- **3. Decryption Configuration** (appears for Receiver after setting role)
+  - `Decryption mode` (`#receiver-decrypt-mode`): Select the decryption method (single mode)
+    - **0 – Plaintext (No encryption)**: Key exchange and PSK fields are **hidden**
+    - **1 – AES-GCM Decryption**: Key exchange and PSK fields are **shown**
+    - **2 – AES-CBC + HMAC-SHA256 Decryption**: Key exchange and PSK fields are **shown**
+    - **3 – Diffie-Hellman Decryption**: Key exchange and PSK fields are **shown**
+  - The receiver will accept connections from senders using the **exact same encryption mode**.
+  - `Key exchange` (`#receiver-kx-mode`): **Only shown for encrypted modes (1-3)**
+    - Must match the sender's key exchange method exactly.
+  - `Pre‑shared key` (`#receiver-psk-input`): **Only shown for encrypted modes (1-3)**
+    - **Required** when Key exchange = "Pre‑shared key (psk)"
+    - Must match the sender's PSK exactly
+    - Shows indicator "⚠ REQUIRED for PSK key exchange" when required
   - `Demo mode` (`#receiver-demo-mode`): enables more verbose logging/steps.
 
 - **4. Chat / Logs** (appears after setting role)
   - `Chat log` (`#chat-log`): shows sent/received messages and logs.
+    - **For encrypted messages**: Shows ciphertext first, then plaintext
+      - Example: `→ SENT (ciphertext): <base64>...` followed by `→ SENT (plaintext): Hello`
+    - **For plaintext messages**: Shows only plaintext
+      - Example: `→ SENT: Hello`
   - `Input` (`#chat-input`) + `Send` button (`#send-btn`): used by **Sender** to send messages (hidden for Receiver and Attacker).
 
 - **Attacker Controls** (appears for Attacker after setting role)
