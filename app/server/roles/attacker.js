@@ -15,7 +15,7 @@ function createAttacker(config, ws) {
   const mode = config.attackMode || "passive";
   const dropRate = Number(config.dropRate || 0);
   const delayMs = Number(config.delayMs || 0);
-  const modifyText = config.modifyText || "";
+  const modifyText = (config.modifyText && config.modifyText.trim()) || "[MITM modified]";
 
   let server = null;
   let clientConn = null;
@@ -72,18 +72,41 @@ function createAttacker(config, ws) {
       } catch {}
     }
     
-    logUi(ws, "attacker", "Sender connected to attacker, connecting to real receiver");
+    if (!targetIp || targetIp === "127.0.0.1") {
+      logUi(ws, "attacker", "ERROR: Target IP not configured. Please set Target IP to receiver's IP address.");
+      sendUi(ws, { type: "error", error: "Target IP not configured. Please set Target IP in Network Setup." });
+      try {
+        if (clientConn) {
+          clientConn.end();
+          clientConn.destroy();
+        }
+      } catch {}
+      clientConn = null;
+      return;
+    }
+    
+    logUi(ws, "attacker", `Sender connected to attacker, connecting to real receiver at ${targetIp}:${targetPort}`);
     serverConn = new net.Socket();
     
     try {
       await new Promise((resolve, reject) => {
-        serverConn.once("error", reject);
-        serverConn.connect(targetPort, targetIp, () => {
+        const timeout = setTimeout(() => {
+          reject(new Error("Connection timeout"));
+        }, 10000); // 10 second timeout
+        
+        serverConn.once("error", (err) => {
+          clearTimeout(timeout);
+          reject(err);
+        });
+        serverConn.once("connect", () => {
+          clearTimeout(timeout);
           serverConn.removeAllListeners("error");
           resolve();
         });
+        serverConn.connect(targetPort, targetIp);
       });
       logUi(ws, "attacker", "Connected to real receiver, starting bidirectional relay");
+      sendUi(ws, { type: "status", status: `MITM active: sender <-> attacker <-> receiver (${targetIp}:${targetPort})` });
 
       relay(clientConn, serverConn, "sender->receiver").catch((e) =>
         logUi(ws, "attacker", `Relay error (s->r): ${e.message}`)
@@ -92,8 +115,8 @@ function createAttacker(config, ws) {
         logUi(ws, "attacker", `Relay error (r->s): ${e.message}`)
       );
     } catch (e) {
-      logUi(ws, "attacker", `Failed to connect to receiver: ${e.message}`);
-      sendUi(ws, { type: "error", error: `Failed to connect to receiver: ${e.message}` });
+      logUi(ws, "attacker", `Failed to connect to receiver at ${targetIp}:${targetPort}: ${e.message}`);
+      sendUi(ws, { type: "error", error: `Failed to connect to receiver: ${e.message}. Check that receiver is running and Target IP is correct.` });
       try {
         if (clientConn) {
           clientConn.end();
@@ -139,56 +162,68 @@ function createAttacker(config, ws) {
       // Attack logic
       let outFrame = frame;
       if (fromSender) {
-        lastFrameFromSender = frame;
-        if (mode === "drop" && maybe(dropRate)) {
-          logUi(ws, "attacker", "Dropping frame per dropRate");
-          continue;
+        // Store last frame for replay
+        if (frame.type === FRAME_TYPES.DATA) {
+          lastFrameFromSender = frame;
         }
-        if (mode === "replay" && lastFrameFromSender) {
-          logUi(ws, "attacker", "Replaying last frame");
-          outFrame = lastFrameFromSender;
+        
+        // Apply attack modes
+        if (mode === "drop") {
+          if (maybe(dropRate)) {
+            logUi(ws, "attacker", `Dropping frame per dropRate (${dropRate}%)`);
+            continue; // Don't forward this frame
+          }
         }
+        
         if (mode === "delay" && delayMs > 0) {
+          logUi(ws, "attacker", `Delaying frame by ${delayMs}ms`);
           await new Promise((r) => setTimeout(r, delayMs));
         }
+        
         if (mode === "modify" && frame.type === FRAME_TYPES.DATA) {
           try {
-            const obj = JSON.parse(frame.payload.toString("utf8"));
+            const payloadStr = frame.payload.toString("utf8");
+            const obj = JSON.parse(payloadStr);
             if (typeof obj.text === "string") {
-              obj.text = modifyText || "[MITM modified]";
+              // This is plaintext - we can modify it
+              obj.text = modifyText;
               const newPayload = Buffer.from(JSON.stringify(obj), "utf8");
               outFrame = { ...frame, payload: newPayload };
-              logUi(ws, "attacker", "Modified plaintext DATA frame");
-              sendUi(ws, { type: "attackSuccess", message: "Successfully modified plaintext message" });
+              logUi(ws, "attacker", `Modified plaintext DATA frame: "${obj.text}"`);
+              sendUi(ws, { type: "attackSuccess", message: `Successfully modified plaintext message to: "${modifyText}"` });
             } else {
-              logUi(
-                ws,
-                "attacker",
-                "Modify mode: frame not plaintext or not understood, leaving as-is"
-              );
+              // Encrypted payload - cannot modify
+              logUi(ws, "attacker", "Modify mode: frame is encrypted, cannot modify");
               sendUi(ws, { type: "attackFailed", message: "Modify attack failed: message is encrypted (cannot modify ciphertext)" });
             }
-          } catch {
-            logUi(ws, "attacker", "Modify mode: failed to parse payload as JSON");
+          } catch (e) {
+            // If we can't parse as JSON, it's likely encrypted
+            logUi(ws, "attacker", `Modify mode: failed to parse payload (likely encrypted): ${e.message}`);
             sendUi(ws, { type: "attackFailed", message: "Modify attack failed: cannot parse encrypted payload" });
           }
         }
+        
+        if (mode === "replay" && frame.type === FRAME_TYPES.DATA && lastFrameFromSender) {
+          // Replay the last DATA frame instead of the current one
+          logUi(ws, "attacker", "Replaying last DATA frame");
+          outFrame = lastFrameFromSender;
+          sendUi(ws, { type: "attackSuccess", message: "Replaying last DATA frame" });
+        }
+        
         if (mode === "downgrade" && frame.type === FRAME_TYPES.HELLO) {
           try {
             const hello = JSON.parse(frame.payload.toString("utf8"));
+            const originalMode = hello.encMode;
             hello.encMode = 0; // force plaintext
             const newPayload = Buffer.from(JSON.stringify(hello), "utf8");
             outFrame = { ...frame, payload: newPayload };
-            logUi(ws, "attacker", "Attempted downgrade to plaintext in HELLO");
+            logUi(ws, "attacker", `Attempted downgrade from mode ${originalMode} to plaintext (mode 0) in HELLO`);
+            sendUi(ws, { type: "attackSuccess", message: `Attempted downgrade attack: mode ${originalMode} -> 0` });
             // Note: We'll detect failure when receiver sends ERROR frame
-          } catch {
-            logUi(ws, "attacker", "Downgrade mode: failed to parse HELLO");
+          } catch (e) {
+            logUi(ws, "attacker", `Downgrade mode: failed to parse HELLO: ${e.message}`);
             sendUi(ws, { type: "attackFailed", message: "Downgrade attack failed: cannot parse HELLO" });
           }
-        }
-        if (mode === "replay" && lastFrameFromSender) {
-          // Replay attacks will be detected as failed when receiver detects replay
-          // (we'll see this in the receiver's response or lack thereof)
         }
       }
 

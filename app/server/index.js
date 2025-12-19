@@ -142,7 +142,13 @@ wss.on("connection", (ws) => {
           break;
         }
         case "checkHandshake": {
-          if (roleInstance && roleInstance.checkHandshake) {
+          if (!currentRole) {
+            ws.send(JSON.stringify({ 
+              type: "handshakeStatus", 
+              complete: false,
+              status: "No role selected" 
+            }));
+          } else if (roleInstance && roleInstance.checkHandshake) {
             const handshakeStatus = roleInstance.checkHandshake();
             ws.send(JSON.stringify({ 
               type: "handshakeStatus", 
@@ -153,7 +159,7 @@ wss.on("connection", (ws) => {
             ws.send(JSON.stringify({ 
               type: "handshakeStatus", 
               complete: false,
-              status: "Role not configured" 
+              status: `Role "${currentRole}" configured, waiting for connection...` 
             }));
           }
           break;

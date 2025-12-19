@@ -15,6 +15,7 @@ TABLE OF CONTENTS
 5. Attacker (MITM) Role - Complete Guide
 6. Common Workflows
 7. Troubleshooting
+8. Termux Maintenance Commands (Android)
 
 ================================================================================
 1. GETTING STARTED
@@ -678,6 +679,189 @@ SOLUTION:
 - This is normal for Attacker role - Attacker sees ciphertext
 - For Sender/Receiver, messages should appear as plain text after decryption
 - If Sender/Receiver see hex, check Encryption Mode settings
+
+================================================================================
+8. TERMUX MAINTENANCE COMMANDS (ANDROID)
+================================================================================
+
+This section provides essential Termux commands for maintaining the repository
+on Android devices, especially when dealing with frequent updates.
+
+A. UPDATING THE REPOSITORY
+---------------------------
+If you cloned the repository via git and need to pull the latest changes:
+
+1. Navigate to the project directory:
+   ```bash
+   cd ~/MITM
+   ```
+   (Replace ~/MITM with your actual project path)
+
+2. Check current status:
+   ```bash
+   git status
+   ```
+   This shows if you have local changes that might conflict.
+
+3. Fetch latest changes from remote:
+   ```bash
+   git fetch origin
+   ```
+
+4. Pull latest changes:
+   ```bash
+   git pull origin main
+   ```
+   (Replace "main" with "master" if your repository uses master branch)
+
+5. If you have local changes that conflict:
+   - Option A: Stash your changes, pull, then reapply:
+     ```bash
+     git stash
+     git pull origin main
+     git stash pop
+     ```
+   - Option B: Discard local changes (WARNING: loses your modifications):
+     ```bash
+     git reset --hard origin/main
+     ```
+
+6. After pulling, reinstall dependencies (in case package.json changed):
+   ```bash
+   npm install
+   ```
+
+B. DELETING AND RE-CLONING THE REPOSITORY
+------------------------------------------
+If the repository has constant updates and you want a fresh start, or if you
+encounter persistent issues, you can delete and re-clone:
+
+1. Navigate to the parent directory (one level above the project):
+   ```bash
+   cd ~
+   ```
+   (Or wherever your project folder is located)
+
+2. Stop any running Node.js processes:
+   ```bash
+   pkill node
+   ```
+   Or press Ctrl+C in the terminal where npm start is running.
+
+3. Delete the entire project directory:
+   ```bash
+   rm -rf MITM
+   ```
+   (Replace "MITM" with your actual project folder name)
+   
+   WARNING: This permanently deletes all local files and changes in the project.
+   Make sure you don't have any important uncommitted work.
+
+4. Re-clone the repository:
+   ```bash
+   git clone <repository-url> MITM
+   ```
+   (Replace <repository-url> with the actual git repository URL)
+   (Replace "MITM" with your desired folder name)
+
+5. Navigate into the new directory:
+   ```bash
+   cd MITM
+   ```
+
+6. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+7. Start the server:
+   ```bash
+   npm start
+   ```
+
+C. QUICK UPDATE SCRIPT (OPTIONAL)
+----------------------------------
+You can create a simple update script to automate the process:
+
+1. Create a file called `update.sh` in your project directory:
+   ```bash
+   nano ~/MITM/update.sh
+   ```
+
+2. Add the following content:
+   ```bash
+   #!/data/data/com.termux/files/usr/bin/bash
+   cd ~/MITM
+   git pull origin main
+   npm install
+   echo "Update complete!"
+   ```
+
+3. Make it executable:
+   ```bash
+   chmod +x ~/MITM/update.sh
+   ```
+
+4. Run it whenever you need to update:
+   ```bash
+   ~/MITM/update.sh
+   ```
+
+D. CHECKING GIT STATUS AND BRANCH
+-----------------------------------
+Useful commands to check your repository state:
+
+- Check current branch:
+  ```bash
+  git branch
+  ```
+
+- Check remote repository URL:
+  ```bash
+  git remote -v
+  ```
+
+- View commit history:
+  ```bash
+  git log --oneline -10
+  ```
+  (Shows last 10 commits)
+
+- Check for uncommitted changes:
+  ```bash
+  git status
+  ```
+
+E. COMMON ISSUES AND SOLUTIONS
+-------------------------------
+PROBLEM: "fatal: not a git repository"
+SOLUTION:
+- Make sure you're in the project directory (cd ~/MITM)
+- If you copied files instead of cloning, you need to initialize git:
+  ```bash
+  git init
+  git remote add origin <repository-url>
+  git pull origin main
+  ```
+
+PROBLEM: "Your local changes would be overwritten by merge"
+SOLUTION:
+- Stash your changes: `git stash`
+- Pull updates: `git pull origin main`
+- Reapply changes: `git stash pop`
+- Or discard changes: `git reset --hard origin/main` (WARNING: loses changes)
+
+PROBLEM: "Permission denied" when running scripts
+SOLUTION:
+- Make script executable: `chmod +x script-name.sh`
+- Or run with bash: `bash script-name.sh`
+
+PROBLEM: npm install fails after update
+SOLUTION:
+- Clear npm cache: `npm cache clean --force`
+- Delete node_modules: `rm -rf node_modules`
+- Delete package-lock.json: `rm package-lock.json`
+- Reinstall: `npm install`
 
 ================================================================================
 QUICK REFERENCE

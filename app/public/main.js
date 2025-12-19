@@ -143,9 +143,12 @@ function ensureWs() {
           logLine(`✓ ${msg.status}`, "success");
           statusEl.textContent = msg.status;
         } else {
-          logLine(`⏳ ${msg.status}`, "role-selected");
+          // Only log if it's a meaningful status change
+          if (msg.status && !msg.status.includes("Role not configured") && !msg.status.includes("No role selected")) {
+            logLine(`⏳ ${msg.status}`, "role-selected");
+          }
           // Only update status if it's not already showing a more specific message
-          if (!statusEl.textContent.includes("Handshake complete")) {
+          if (!statusEl.textContent.includes("Handshake complete") && !statusEl.textContent.includes("listening")) {
             statusEl.textContent = msg.status;
           }
         }
@@ -182,7 +185,7 @@ setRoleBtn.onclick = () => {
   const attackMode = document.getElementById("attack-mode").value;
   const dropRate = parseInt(document.getElementById("drop-rate").value, 10) || 0;
   const delayMs = parseInt(document.getElementById("delay-ms").value, 10) || 0;
-  const modifyText = document.getElementById("modify-text").value;
+  const modifyText = document.getElementById("modify-text").value.trim();
   
   // Get config based on role
   let config = {
@@ -227,6 +230,14 @@ setRoleBtn.onclick = () => {
       config
     })
   );
+  
+  // Auto-connect sender if target IP is provided
+  if (role === "sender" && targetIp) {
+    // Small delay to ensure role is configured first
+    setTimeout(() => {
+      connectBtn.click();
+    }, 100);
+  }
 };
 
 connectBtn.onclick = () => {
@@ -270,6 +281,11 @@ connectBtn.onclick = () => {
 
 refreshBtn.onclick = () => {
   ensureWs();
+  
+  if (!currentRole) {
+    logLine("Please set a role first", "error");
+    return;
+  }
   
   // For sender role, refresh discovery
   if (currentRole === "sender") {
