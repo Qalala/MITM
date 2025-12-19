@@ -87,14 +87,31 @@ On Android you can run the **backend** in Termux and the **UI** in the mobile br
    ```
    > Replace `yourusername` with the actual GitHub username/organization.
 
-6. **Install Python and pip (optional, for Python crypto utilities)**
+6. **Install Python and cryptography (optional, for Python crypto utilities)**
+   
+   **IMPORTANT for Termux:** Use Termux's package manager instead of pip to avoid version conflicts:
    ```bash
-   pkg install python
-   # Verify pip is available:
-   python -m pip --version
-   # If not available:
-   pkg install python-pip
+   pkg install python python-cryptography
    ```
+   
+   This installs pre-built binaries that work correctly on Termux.
+   
+   **Alternative (if above doesn't work):**
+   ```bash
+   # Install Python first
+   pkg install python
+   
+   # Install build dependencies
+   pkg install python-dev libffi-dev openssl-dev
+   
+   # Then try pip install
+   pip install cryptography
+   ```
+   
+   **If you still get errors:**
+   - Make sure you're using the standard Python (not PyPy): `python --version`
+   - Reinstall Python: `pkg remove python && pkg install python`
+   - Try: `pip install --upgrade pip setuptools wheel` then `pip install cryptography`
 
 7. **Install project dependencies**
    ```bash
@@ -438,6 +455,60 @@ node scripts/udp_broadcast_demo.js recv <printed-key-hex>
 
 4. **Expected results**
    - Receivers show AES‑GCM decrypted broadcast messages; tampering should fail due to integrity checks.
+
+---
+
+## 4. Troubleshooting
+
+### 4.1. Cryptography Package Issues on Termux
+
+If you encounter errors like "pypy and python version don't match" or "cryptography installation failed" on Termux:
+
+**Solution 1: Use Termux Package Manager (Recommended)**
+```bash
+# Remove any pip-installed cryptography
+pip uninstall cryptography
+
+# Install from Termux repositories (pre-built, works reliably)
+pkg install python-cryptography
+```
+
+**Solution 2: Reinstall Python and Dependencies**
+```bash
+# Remove Python completely
+pkg remove python python-pip
+
+# Reinstall fresh
+pkg install python python-cryptography
+
+# Verify installation
+python -c "import cryptography; print('OK')"
+```
+
+**Solution 3: Install Build Dependencies (if pip install is needed)**
+```bash
+# Install required build tools
+pkg install python-dev libffi-dev openssl-dev rust
+
+# Upgrade pip and build tools
+pip install --upgrade pip setuptools wheel
+
+# Install cryptography
+pip install cryptography
+```
+
+**Solution 4: Check Python Version**
+```bash
+# Make sure you're using standard Python (not PyPy)
+python --version
+# Should show: Python 3.x.x
+
+# If you see PyPy, reinstall:
+pkg remove python
+pkg install python
+```
+
+**Note:** The Python crypto utilities are **optional**. The server will run without them, but some crypto validation features may be limited. The main encryption/decryption is handled by Node.js, so the server works fine even if Python cryptography isn't installed.
 
 ---
 

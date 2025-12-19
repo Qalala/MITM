@@ -259,22 +259,25 @@ function createAttacker(config, ws) {
         }
       }
       
-      // For passive mode, try to extract and display plaintext
+      // For passive mode, try to extract and display plaintext (only for DATA frames)
       if (mode === "passive" && frame.type === FRAME_TYPES.DATA) {
         const plaintext = extractPlaintext(frame);
         if (plaintext !== null) {
           logAttack(`[PASSIVE] Plaintext message: "${plaintext}"`, "success");
         } else {
-          logAttack(`[PASSIVE] Encrypted message (cannot decrypt)`, "warning");
+          logAttack(`[PASSIVE] Encrypted DATA frame (cannot decrypt)`, "warning");
         }
       }
       
-      const rawHex = frame.payload.toString("hex");
-      logUi(
-        ws,
-        "attacker",
-        `${direction} frame type=${frame.type} len=${frame.payload.length} raw-hex=${rawHex.slice(0, 64)}...`
-      );
+      // Log frame details (less verbose for passive mode)
+      if (mode !== "passive" || frame.type === FRAME_TYPES.DATA || frame.type === FRAME_TYPES.HELLO) {
+        const rawHex = frame.payload.toString("hex");
+        logUi(
+          ws,
+          "attacker",
+          `${direction} frame type=${frame.type} len=${frame.payload.length}${mode === "passive" ? "" : ` raw-hex=${rawHex.slice(0, 64)}...`}`
+        );
+      }
       
       // Detect attack failures from receiver responses
       if (fromReceiver && frame.type === FRAME_TYPES.ERROR) {
@@ -290,76 +293,112 @@ function createAttacker(config, ws) {
         }
       }
 
-      // Attack logic
+      // Attack logic - only apply if attack is active
       let outFrame = frame;
-      if (fromSender) {
-        // Store last frame for replay
-        if (frame.type === FRAME_TYPES.DATA) {
-          lastFrameFromSender = frame;
-        }
+      let shouldForward = true;
+      
+      if (fromSender && attackActive) {
+        // Apply attack modes to frames from sender to receiver
         
-        // Apply attack modes
-        if (mode === "drop") {
+        // DROP mode: Randomly drop frames based on dropRate
+        if (mode === "drop" && dropRate > 0) {
           if (maybe(dropRate)) {
-            logAttack(`Dropping frame per dropRate (${dropRate}%)`, "warning");
-            continue; // Don't forward this frame
+            logAttack(`[DROP] Dropping frame per dropRate (${dropRate}%)`, "warning");
+            shouldForward = false; // Don't forward this frame
+          } else {
+            logAttack(`[DROP] Forwarding frame (not dropped)`, "info");
           }
         }
         
-        if (mode === "delay" && delayMs > 0) {
-          logAttack(`Delaying frame by ${delayMs}ms`, "info");
+        // DELAY mode: Delay frames before forwarding
+        if (mode === "delay" && delayMs > 0 && shouldForward) {
+          logAttack(`[DELAY] Delaying frame by ${delayMs}ms`, "info");
           await new Promise((r) => setTimeout(r, delayMs));
         }
         
-        if (mode === "modify" && frame.type === FRAME_TYPES.DATA) {
+        // MODIFY mode: Modify plaintext DATA frames
+        if (mode === "modify" && frame.type === FRAME_TYPES.DATA && shouldForward) {
           try {
             const plaintext = extractPlaintext(frame);
             if (plaintext !== null) {
               // This is plaintext - we can modify it
               const obj = JSON.parse(frame.payload.toString("utf8"));
+              const originalText = obj.text;
               obj.text = modifyText;
               const newPayload = Buffer.from(JSON.stringify(obj), "utf8");
               outFrame = { ...frame, payload: newPayload };
-              logAttack(`Modified plaintext DATA frame: "${modifyText}"`, "success");
-              sendUi(ws, { type: "attackSuccess", message: `Successfully modified plaintext message to: "${modifyText}"` });
+              logAttack(`[MODIFY] Modified plaintext DATA frame: "${originalText}" -> "${modifyText}"`, "success");
+              sendUi(ws, { type: "attackSuccess", message: `Successfully modified plaintext message: "${originalText}" -> "${modifyText}"` });
             } else {
               // Encrypted payload - cannot modify
-              logAttack("Modify attack failed: message is encrypted (cannot modify ciphertext)", "failed");
+              logAttack("[MODIFY] Attack failed: message is encrypted (cannot modify ciphertext)", "failed");
               sendUi(ws, { type: "attackFailed", message: "Modify attack failed: message is encrypted (cannot modify ciphertext without decryption key)" });
             }
           } catch (e) {
             // If we can't parse as JSON, it's likely encrypted
-            logAttack(`Modify attack failed: cannot parse payload (likely encrypted): ${e.message}`, "failed");
+            logAttack(`[MODIFY] Attack failed: cannot parse payload (likely encrypted): ${e.message}`, "failed");
             sendUi(ws, { type: "attackFailed", message: "Modify attack failed: cannot parse encrypted payload" });
           }
         }
         
-        if (mode === "replay" && frame.type === FRAME_TYPES.DATA && lastFrameFromSender) {
-          // Replay the last DATA frame instead of the current one
-          logAttack("Replaying last DATA frame", "warning");
-          outFrame = lastFrameFromSender;
-          sendUi(ws, { type: "attackSuccess", message: "Replaying last DATA frame" });
-          // Note: This will likely fail if encryption mode has replay protection
+        // REPLAY mode: Replay the last DATA frame instead of current one
+        if (mode === "replay" && frame.type === FRAME_TYPES.DATA && shouldForward) {
+          if (lastFrameFromSender) {
+            // Replay the last DATA frame instead of the current one
+            // Use a deep copy to avoid modifying the stored frame
+            const replayFrame = {
+              type: lastFrameFromSender.type,
+              payload: Buffer.from(lastFrameFromSender.payload)
+            };
+            outFrame = replayFrame;
+            logAttack("[REPLAY] Replaying last DATA frame instead of current", "warning");
+            sendUi(ws, { type: "attackSuccess", message: "Replaying last DATA frame" });
+            // Note: This will likely fail if encryption mode has replay protection
+          } else {
+            // First message - forward normally, will be stored below
+            logAttack("[REPLAY] First DATA frame - storing for future replay", "info");
+          }
         }
         
-        if (mode === "downgrade" && frame.type === FRAME_TYPES.HELLO) {
+        // Store last DATA frame for replay mode (store original before any modifications)
+        // Store AFTER replay check so we don't lose the previous frame
+        if (frame.type === FRAME_TYPES.DATA) {
+          // Deep copy the ORIGINAL frame to avoid reference issues
+          // Store it before any modifications so replay uses the original message
+          lastFrameFromSender = {
+            type: frame.type,
+            payload: Buffer.from(frame.payload)
+          };
+        }
+        
+        // DOWNGRADE mode: Modify HELLO frame to force plaintext
+        if (mode === "downgrade" && frame.type === FRAME_TYPES.HELLO && shouldForward) {
           try {
             const hello = JSON.parse(frame.payload.toString("utf8"));
             const originalMode = hello.encMode;
-            hello.encMode = 0; // force plaintext
-            const newPayload = Buffer.from(JSON.stringify(hello), "utf8");
-            outFrame = { ...frame, payload: newPayload };
-            logAttack(`Attempted downgrade from mode ${originalMode} to plaintext (mode 0) in HELLO`, "warning");
-            sendUi(ws, { type: "attackSuccess", message: `Attempted downgrade attack: mode ${originalMode} -> 0` });
-            // Note: We'll detect failure when receiver sends ERROR frame
+            if (originalMode !== 0) {
+              hello.encMode = 0; // force plaintext
+              const newPayload = Buffer.from(JSON.stringify(hello), "utf8");
+              outFrame = { ...frame, payload: newPayload };
+              logAttack(`[DOWNGRADE] Attempted downgrade from mode ${originalMode} to plaintext (mode 0) in HELLO`, "warning");
+              sendUi(ws, { type: "attackSuccess", message: `Attempted downgrade attack: mode ${originalMode} -> 0` });
+              // Note: We'll detect failure when receiver sends ERROR frame
+            } else {
+              logAttack("[DOWNGRADE] HELLO already in plaintext mode, no downgrade needed", "info");
+            }
           } catch (e) {
-            logAttack(`Downgrade attack failed: cannot parse HELLO: ${e.message}`, "failed");
+            logAttack(`[DOWNGRADE] Attack failed: cannot parse HELLO: ${e.message}`, "failed");
             sendUi(ws, { type: "attackFailed", message: "Downgrade attack failed: cannot parse HELLO" });
           }
         }
-      }
+      // Note: If attackActive is false, frames are still relayed but attacks are not applied
 
       // Forward - check connection state before writing
+      if (!shouldForward) {
+        // Frame was dropped, skip forwarding
+        continue;
+      }
+      
       if (!dst || dst.destroyed || dst.closed) {
         logAttack(`Destination connection closed, stopping relay: ${direction}`, "warning");
         break;
@@ -376,6 +415,10 @@ function createAttacker(config, ws) {
         // Handle backpressure (though unlikely with our frame sizes)
         if (!written) {
           await new Promise((resolve) => dst.once("drain", resolve));
+        }
+        // Log successful forwarding for non-passive modes
+        if (attackActive && mode !== "passive" && fromSender) {
+          logAttack(`[${mode.toUpperCase()}] Frame forwarded successfully`, "info");
         }
       } catch (e) {
         logAttack(`Failed to write frame in ${direction}: ${e.message}`, "failed");
@@ -415,12 +458,12 @@ function createAttacker(config, ws) {
   }
 
   async function startAttack(attackConfig) {
-    attackActive = true;
     // Update target IP from config (victim's IP - the receiver that attacker proxies to)
     if (attackConfig.targetIp) {
       targetIp = attackConfig.targetIp;
     }
     
+    // Update attack configuration FIRST (this sets the mode)
     updateAttackConfig(attackConfig);
     
     if (!targetIp) {
@@ -430,12 +473,25 @@ function createAttacker(config, ws) {
       return;
     }
     
-    logAttack(`Attack started: mode=${mode}, victim=${targetIp}:${targetPort}`, "info");
+    // Activate attack AFTER config is updated
+    attackActive = true;
+    
+    logAttack(`[ATTACK STARTED] Mode: ${mode}, Victim: ${targetIp}:${targetPort}`, "info");
+    if (mode === "drop" && dropRate > 0) {
+      logAttack(`[ATTACK STARTED] Drop rate: ${dropRate}%`, "info");
+    }
+    if (mode === "delay" && delayMs > 0) {
+      logAttack(`[ATTACK STARTED] Delay: ${delayMs}ms`, "info");
+    }
+    if (mode === "modify") {
+      logAttack(`[ATTACK STARTED] Modify text: "${modifyText}"`, "info");
+    }
     sendUi(ws, { type: "status", status: `Attack active: ${mode} mode, victim: ${targetIp}:${targetPort}` });
     
     // The attacker listens and intercepts when sender connects
     if (!server) {
       logAttack("Attacker server not ready. Please wait for server to start.", "warning");
+      attackActive = false;
       return;
     }
     
