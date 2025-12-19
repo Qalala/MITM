@@ -73,12 +73,17 @@ wss.on("connection", (ws) => {
           const port = cfg.port || 12347;
           
           // Start or restart discovery with current role/port
+          // CRITICAL: Discovery must be started for ALL roles (sender, receiver, attacker)
+          // This allows sender to discover receivers and vice versa
           if (discovery && discovery.socket) {
             // Update existing discovery with new role/port
             discovery.currentRole = currentRole;
             discovery.currentPort = port;
           } else {
+            // Start fresh discovery - ensure socket is properly initialized
             discovery = startDiscovery(currentRole, port);
+            // Give socket time to bind before using it
+            await new Promise(resolve => setTimeout(resolve, 100));
           }
           
           if (currentRole === "sender") {
@@ -92,7 +97,7 @@ wss.on("connection", (ws) => {
           }
           
           // Broadcast presence immediately and then periodically
-          // Only broadcast if we have a valid role
+          // CRITICAL: ALL roles (including sender) must broadcast so they can be discovered
           if (currentRole && currentRole !== "unknown") {
             broadcastPresence(discovery, currentRole, port);
             broadcastInterval = setInterval(() => {
@@ -109,9 +114,11 @@ wss.on("connection", (ws) => {
           const cfg = msg.config || {};
           const port = cfg.port || 12347;
           
-          // Start discovery if not already started (even without a role set)
+          // Ensure discovery is started and properly configured
           if (!discovery || !discovery.socket) {
             discovery = startDiscovery(currentRole || "unknown", port);
+            // Give socket time to bind before sending probes
+            await new Promise(resolve => setTimeout(resolve, 200));
           } else {
             // Update role/port if changed
             discovery.currentRole = currentRole || "unknown";
@@ -124,10 +131,11 @@ wss.on("connection", (ws) => {
           }
           
           // Send probe and wait for responses
+          // This will discover receivers and attackers on the network
           const results = await sendDiscoveryPing(discovery);
           
           // Also broadcast our own presence so others can discover us
-          if (currentRole) {
+          if (currentRole && currentRole !== "unknown") {
             broadcastPresence(discovery, currentRole, port);
           }
           

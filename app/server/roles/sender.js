@@ -254,7 +254,9 @@ function createSender(config, ws) {
       await connect(cfg);
     },
     async sendMessage(text) {
-      if (transport === "udp-broadcast") {
+      // Check current transport from stored config
+      const currentTransport = storedConfig.transport || transport;
+      if (currentTransport === "udp-broadcast") {
         sendUi(ws, {
           type: "error",
           error: "UDP broadcast sending is available via scripts/udp_broadcast_demo.js"
