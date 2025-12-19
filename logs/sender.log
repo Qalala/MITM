@@ -97,5 +97,12 @@
 [2025-12-19T14:22:50.214Z] [sender] Handshake complete, ready to send data
 [2025-12-19T14:22:55.524Z] [sender] SENT: hello
 [2025-12-19T14:23:01.556Z] [sender] SENT: hi
-[2025-12-19T14:23:21.865Z] [sender] SENT: a7a
 [2025-12-19T14:24:02.374Z] [sender] SENT: hi
+[2025-12-19T14:41:54.168Z] [sender] Sender configured with encryption mode: 0, KX mode: psk
+[2025-12-19T14:42:20.596Z] [sender] Updated encryption mode to 0 from connect config
+[2025-12-19T14:42:20.597Z] [sender] Connecting with encryption mode: 0, KX mode: psk
+[2025-12-19T14:42:20.600Z] [sender] Connected to 192.168.1.10:12347, starting handshake
+[2025-12-19T14:42:20.653Z] [sender] Handshake complete, ready to send data
+[2025-12-19T14:42:26.096Z] [sender] SENT: test
+[2025-12-19T14:44:56.351Z] [sender] SENT: ji
+[2025-12-19T14:45:15.970Z] [sender] SENT: oh
