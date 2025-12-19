@@ -178,13 +178,6 @@ function ensureWs() {
             statusEl.textContent = msg.status;
           }
         }
-      } else if (msg.type === "attackStatus") {
-        // Update attack status display
-        if (attackStatus) {
-          attackStatus.style.display = "block";
-          attackStatus.textContent = msg.message || msg.status;
-          attackStatus.style.color = msg.success ? "#4caf50" : "#ff9800";
-        }
       }
     } catch (e) {
       console.error(e);
@@ -475,17 +468,11 @@ function displayDiscoveryResults(results) {
           // Update status to show receiver is ready
           statusEl.textContent = `Receiver listening - will accept from ${ip}:${port}`;
         } else if (currentRole === "attacker") {
-          // For attacker, set target IP to the discovered device and store as selected target
-          selectedTarget = { role, ip, port };
+          // For attacker, set target IP to the discovered device
           logLine(`Attacker target set to: ${role} at ${ip}:${port}`, "success");
-          logLine("Click an attack button to initiate attack on this target", "role-selected");
+          logLine("Attacker will intercept connections to this target", "role-selected");
           // Update status
-          statusEl.textContent = `Target selected: ${role} at ${ip}:${port}`;
-          if (attackStatus) {
-            attackStatus.style.display = "block";
-            attackStatus.textContent = `Target: ${role} at ${ip}:${port}`;
-            attackStatus.style.color = "#4caf50";
-          }
+          statusEl.textContent = `Attacker will intercept: ${role} at ${ip}:${port}`;
         } else {
           logLine(`Selected discovered device: ${role} at ${ip}:${port}`, "success");
         }
@@ -511,91 +498,6 @@ discoverBtn.onclick = () => {
   ws.send(JSON.stringify({ type: "discover", config: cfg }));
 };
 
-// Attack buttons for attacker role
-let selectedTarget = null; // Store selected target from discovery
-
-const attackModifyBtn = document.getElementById("attack-modify-btn");
-const attackDropBtn = document.getElementById("attack-drop-btn");
-const attackDelayBtn = document.getElementById("attack-delay-btn");
-const attackReplayBtn = document.getElementById("attack-replay-btn");
-const attackDowngradeBtn = document.getElementById("attack-downgrade-btn");
-const attackStopBtn = document.getElementById("attack-stop-btn");
-const attackStatus = document.getElementById("attack-status");
-
-function triggerAttack(attackType) {
-  ensureWs();
-  
-  if (currentRole !== "attacker") {
-    logLine("Only attacker role can initiate attacks", "error");
-    return;
-  }
-  
-  if (!selectedTarget) {
-    logLine("Please select a target from Auto Discover first", "error");
-    return;
-  }
-  
-  const config = {
-    attackType,
-    targetIp: selectedTarget.ip,
-    targetPort: selectedTarget.port,
-    targetRole: selectedTarget.role
-  };
-  
-  // Add attack-specific parameters
-  if (attackType === "modify") {
-    config.modifyText = document.getElementById("modify-text").value.trim() || "[MITM modified]";
-  } else if (attackType === "drop") {
-    config.dropRate = parseInt(document.getElementById("drop-rate").value, 10) || 10;
-  } else if (attackType === "delay") {
-    config.delayMs = parseInt(document.getElementById("delay-ms").value, 10) || 1000;
-  }
-  
-  logLine(`Initiating ${attackType} attack on ${selectedTarget.role} at ${selectedTarget.ip}:${selectedTarget.port}`, "role-selected");
-  
-  if (attackStatus) {
-    attackStatus.style.display = "block";
-    attackStatus.textContent = `Active: ${attackType} attack on ${selectedTarget.role}`;
-    attackStatus.style.color = "#ff9800";
-  }
-  
-  ws.send(JSON.stringify({
-    type: "triggerAttack",
-    config
-  }));
-}
-
-if (attackModifyBtn) {
-  attackModifyBtn.onclick = () => triggerAttack("modify");
-}
-if (attackDropBtn) {
-  attackDropBtn.onclick = () => triggerAttack("drop");
-}
-if (attackDelayBtn) {
-  attackDelayBtn.onclick = () => triggerAttack("delay");
-}
-if (attackReplayBtn) {
-  attackReplayBtn.onclick = () => triggerAttack("replay");
-}
-if (attackDowngradeBtn) {
-  attackDowngradeBtn.onclick = () => triggerAttack("downgrade");
-}
-if (attackStopBtn) {
-  attackStopBtn.onclick = () => {
-    ensureWs();
-    if (currentRole !== "attacker") {
-      logLine("Only attacker role can stop attacks", "error");
-      return;
-    }
-    logLine("Stopping all attacks", "role-selected");
-    if (attackStatus) {
-      attackStatus.style.display = "block";
-      attackStatus.textContent = "All attacks stopped";
-      attackStatus.style.color = "#4caf50";
-    }
-    ws.send(JSON.stringify({ type: "stopAttack" }));
-  };
-}
 
 initInfo();
 

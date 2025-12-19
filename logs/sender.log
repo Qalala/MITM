@@ -107,3 +107,10 @@
 [2025-12-19T14:44:56.351Z] [sender] SENT: ji
 [2025-12-19T14:45:15.970Z] [sender] SENT: oh
 [2025-12-19T14:45:59.237Z] [sender] Background receive error: read ECONNRESET
+[2025-12-19T15:22:05.616Z] [sender] Sender configured with encryption mode: 0, KX mode: psk
+[2025-12-19T15:22:05.619Z] [sender] Updated encryption mode to 0 from connect config
+[2025-12-19T15:22:05.620Z] [sender] Connecting with encryption mode: 0, KX mode: psk
+[2025-12-19T15:22:25.718Z] [sender] Updated encryption mode to 0 from connect config
+[2025-12-19T15:22:25.718Z] [sender] Connecting with encryption mode: 0, KX mode: psk
+[2025-12-19T15:22:26.624Z] [sender] Failed to connect: connect ETIMEDOUT 192.168.1.10:12347
+[2025-12-19T15:22:46.720Z] [sender] Failed to connect: connect ETIMEDOUT 192.168.1.10:12347
