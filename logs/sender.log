@@ -332,3 +332,4 @@
 [2025-12-19T21:26:23.300Z] [sender] SENT: hi
 [2025-12-19T21:26:46.924Z] [sender] SENT: hi
 [2025-12-19T21:27:00.219Z] [sender] SENT: hi
+[2025-12-19T21:42:23.194Z] [sender] Sender configured with encryption mode: 0, KX mode: psk

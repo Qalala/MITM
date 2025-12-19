@@ -391,6 +391,7 @@ function createAttacker(config, ws) {
             sendUi(ws, { type: "attackFailed", message: "Downgrade attack failed: cannot parse HELLO" });
           }
         }
+      }
       // Note: If attackActive is false, frames are still relayed but attacks are not applied
 
       // Forward - check connection state before writing
