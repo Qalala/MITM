@@ -18,6 +18,7 @@ function getLocalIp() {
 
 function startDiscovery(currentRole, currentPort) {
   const socket = dgram.createSocket("udp4");
+  let socketReady = false;
   
   // Bind to all interfaces
   socket.bind(DISCOVERY_PORT, "0.0.0.0", () => {
@@ -25,8 +26,10 @@ function startDiscovery(currentRole, currentPort) {
       socket.setBroadcast(true);
       // Allow reuse address to prevent "address already in use" errors
       socket.setRecvBufferSize(65536);
+      socketReady = true;
     } catch (err) {
       // Ignore errors on some systems
+      socketReady = true; // Still mark as ready even if options fail
     }
   });
   
@@ -48,15 +51,24 @@ function startDiscovery(currentRole, currentPort) {
           // Reference state.currentRole and state.currentPort so updates are reflected
           if (state.currentRole && state.currentPort && state.currentRole !== "unknown") {
             // Respond directly to the sender of the probe
+            // Always use DISCOVERY_PORT as destination - sender should be listening on this port
+            // rinfo.port might be DISCOVERY_PORT or might be the ephemeral port the probe came from
+            // But we always respond to DISCOVERY_PORT since that's where the sender's socket is bound
             const response = Buffer.from(
               JSON.stringify({ magic: MAGIC, role: state.currentRole, ip: getLocalIp(), port: state.currentPort }),
               "utf8"
             );
-            socket.send(response, 0, response.length, rinfo.port, rinfo.address, (err) => {
+            // Try both DISCOVERY_PORT and rinfo.port to ensure response reaches sender
+            socket.send(response, 0, response.length, DISCOVERY_PORT, rinfo.address, (err) => {
               if (err) {
-                // Silently ignore send errors (common on some networks)
+                // If DISCOVERY_PORT fails, try the port from rinfo
+                socket.send(response, 0, response.length, rinfo.port, rinfo.address, () => {});
               }
             });
+            // Also send to rinfo.port in case sender is using that port
+            if (rinfo.port !== DISCOVERY_PORT) {
+              socket.send(response, 0, response.length, rinfo.port, rinfo.address, () => {});
+            }
           }
         }
         // Handle presence announcement (both broadcast and direct responses to probes)
@@ -66,20 +78,23 @@ function startDiscovery(currentRole, currentPort) {
           const localIp = getLocalIp();
           
           // Determine the actual peer IP address
-          // For direct probe responses: rinfo.address is the responder's actual IP
+          // For direct probe responses: rinfo.address is the responder's actual IP (most reliable)
           // For broadcasts: rinfo.address might be broadcast address, so use obj.ip from message
           let peerIp;
-          if (rinfo.address === "255.255.255.255" || rinfo.address === "0.0.0.0" || 
-              rinfo.address.startsWith("169.254.") || !rinfo.address) {
+          if (rinfo.address === "255.255.255.255" || rinfo.address === "0.0.0.0") {
             // This is a broadcast, use IP from message
             peerIp = obj.ip;
-          } else {
-            // Direct response, use rinfo.address (the actual sender's IP)
+          } else if (rinfo.address && rinfo.address !== "127.0.0.1") {
+            // Direct response or unicast, use rinfo.address (the actual sender's IP) - most reliable
             peerIp = rinfo.address;
+          } else {
+            // Fallback to IP from message
+            peerIp = obj.ip;
           }
           
-          // Only add if it's not ourselves
-          if (peerIp && peerIp !== localIp && peerIp !== "127.0.0.1" && peerIp !== "0.0.0.0") {
+          // Only add if it's not ourselves and is a valid IP
+          if (peerIp && peerIp !== localIp && peerIp !== "127.0.0.1" && peerIp !== "0.0.0.0" && 
+              !peerIp.startsWith("169.254.") && peerIp !== "255.255.255.255") {
             // Use the port from the message (this is the main TCP port, not discovery port)
             const devicePort = obj.port || 12347;
             const key = `${obj.role}@${peerIp}:${devicePort}`;
@@ -141,6 +156,9 @@ function broadcastPresence(state, role, mainPort) {
 
 async function sendDiscoveryPing(state) {
   if (!state || !state.socket) return [];
+  
+  // Wait a bit to ensure socket is bound and ready
+  await new Promise((r) => setTimeout(r, 200));
   
   // Clear previous results
   if (state.peers) {
