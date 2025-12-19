@@ -200,76 +200,66 @@ function createAttacker(config, ws) {
       }
     })();
     
-    try {
-      // Activate attacks automatically when MITM connection is established
-      if (!attackActive) {
-        attackActive = true;
-        logAttack(`[MITM] Attacks activated automatically - mode: ${mode}`, "success");
-      }
-      
-      logAttack(`[MITM] Successfully connected to receiver at ${forwardIp}:${targetPort}`, "success");
-      logAttack(`[MITM] Starting bidirectional relay with attack modes`, "info");
-      logAttack(`[MITM] Relay active: Sender <-> Attacker <-> Receiver`, "success");
-      logAttack(`[MITM] Attack mode: ${mode} - attacks will be applied to intercepted traffic`, "success");
-      if (mode === "drop" && dropRate > 0) {
-        logAttack(`[MITM] Drop rate: ${dropRate}%`, "info");
-      }
-      if (mode === "delay" && delayMs > 0) {
-        logAttack(`[MITM] Delay: ${delayMs}ms`, "info");
-      }
-      if (mode === "modify") {
-        logAttack(`[MITM] Modify text: "${modifyText}"`, "info");
-      }
-      sendUi(ws, { type: "status", status: `MITM active: sender <-> attacker <-> receiver (${forwardIp}:${targetPort}). Attack mode: ${mode} - ACTIVE` });
+    // Activate attacks automatically when MITM connection is established
+    if (!attackActive) {
+      attackActive = true;
+      logAttack(`[MITM] Attacks activated automatically - mode: ${mode}`, "success");
+    }
+    
+    logAttack(`[MITM] Sender connected, starting bidirectional relay`, "success");
+    logAttack(`[MITM] Relay active: Sender <-> Attacker <-> Receiver`, "success");
+    logAttack(`[MITM] Attack mode: ${mode} - attacks will be applied to intercepted traffic`, "success");
+    if (mode === "drop" && dropRate > 0) {
+      logAttack(`[MITM] Drop rate: ${dropRate}%`, "info");
+    }
+    if (mode === "delay" && delayMs > 0) {
+      logAttack(`[MITM] Delay: ${delayMs}ms`, "info");
+    }
+    if (mode === "modify") {
+      logAttack(`[MITM] Modify text: "${modifyText}"`, "info");
+    }
+    sendUi(ws, { type: "status", status: `MITM active: sender <-> attacker <-> receiver. Attack mode: ${mode} - ACTIVE` });
 
-      // Add error and close handlers to detect connection failures
-      const cleanupConnections = () => {
-        if (clientConn) {
-          try {
-            clientConn.removeAllListeners();
-            clientConn.end();
-            clientConn.destroy();
-          } catch {}
-          clientConn = null;
-        }
-        if (serverConn) {
-          try {
-            serverConn.removeAllListeners();
-            serverConn.end();
-            serverConn.destroy();
-          } catch {}
-          serverConn = null;
-        }
-        isHandlingClient = false;
-      };
+    // Add error and close handlers to detect connection failures
+    const cleanupConnections = () => {
+      if (clientConn) {
+        try {
+          clientConn.removeAllListeners();
+          clientConn.end();
+          clientConn.destroy();
+        } catch {}
+        clientConn = null;
+      }
+      if (serverConn) {
+        try {
+          serverConn.removeAllListeners();
+          serverConn.end();
+          serverConn.destroy();
+        } catch {}
+        serverConn = null;
+      }
+      isHandlingClient = false;
+    };
 
-      const onClientError = (err) => {
-        logAttack(`Sender connection error: ${err.message}`, "failed");
-        cleanupConnections();
-      };
-      const onClientClose = () => {
-        logAttack("Sender connection closed", "warning");
-        cleanupConnections();
-      };
-      const onServerError = (err) => {
-        logAttack(`Receiver connection error: ${err.message}`, "failed");
-        cleanupConnections();
-      };
-      const onServerClose = () => {
-        logAttack("Receiver connection closed", "warning");
-        cleanupConnections();
-      };
+    const onClientError = (err) => {
+      logAttack(`Sender connection error: ${err.message}`, "failed");
+      cleanupConnections();
+    };
+    const onClientClose = () => {
+      logAttack("Sender connection closed", "warning");
+      cleanupConnections();
+    };
 
-      clientConn.on("error", onClientError);
-      clientConn.on("close", onClientClose);
-      // Note: serverConn error/close handlers are already set up in connectToReceiver
+    clientConn.on("error", onClientError);
+    clientConn.on("close", onClientClose);
+    // Note: serverConn error/close handlers are already set up in connectToReceiver
 
-      // Wait for sender relay to complete
-      senderRelayPromise.catch((e) => {
-        logUi(ws, "attacker", `Sender relay error: ${e.message}`);
-      }).finally(() => {
-        cleanupConnections();
-      });
+    // Wait for sender relay to complete
+    senderRelayPromise.catch((e) => {
+      logUi(ws, "attacker", `Sender relay error: ${e.message}`);
+    }).finally(() => {
+      cleanupConnections();
+    });
   }
   
   // Helper function to process and forward a frame with attack logic
