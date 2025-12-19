@@ -652,7 +652,7 @@ function setupSecurityListeners() {
   const senderPsk = document.getElementById("psk-input");
   const senderDemo = document.getElementById("demo-mode");
   
-  // Initial PSK indicator update
+  // Initial PSK indicator update and field visibility
   updatePskRequiredIndicator();
   
   if (senderDemo) {
@@ -766,6 +766,8 @@ function setupSecurityListeners() {
 }
 
 initInfo();
+// Initialize PSK indicator on page load
+updatePskRequiredIndicator();
 // Function to add attack log entry
 function addAttackLog(message, level = "info") {
   const attackLogContent = document.getElementById("attack-log-content");
@@ -834,32 +836,57 @@ function updateTargetDisplay() {
   targetInfo.style.display = displayText !== "Not set" ? "block" : "none";
 }
 
-// Function to update PSK required indicator
+// Function to update PSK required indicator and show/hide fields based on encryption mode
 function updatePskRequiredIndicator() {
   const senderEncMode = document.getElementById("enc-mode");
   const senderKxMode = document.getElementById("kx-mode");
+  const senderKxModeLabel = senderKxMode ? senderKxMode.closest("label") : null;
+  const senderPskLabel = document.getElementById("psk-input") ? document.getElementById("psk-input").closest("label") : null;
   const senderPskIndicator = document.getElementById("psk-required-indicator");
   const senderPskInput = document.getElementById("psk-input");
   
   const receiverEncMode = document.getElementById("receiver-decrypt-mode");
   const receiverKxMode = document.getElementById("receiver-kx-mode");
+  const receiverKxModeLabel = receiverKxMode ? receiverKxMode.closest("label") : null;
+  const receiverPskLabel = document.getElementById("receiver-psk-input") ? document.getElementById("receiver-psk-input").closest("label") : null;
   const receiverPskIndicator = document.getElementById("receiver-psk-required-indicator");
   const receiverPskInput = document.getElementById("receiver-psk-input");
   
-  // Update sender PSK indicator
-  if (senderEncMode && senderKxMode && senderPskIndicator) {
+  // Update sender fields visibility and requirements
+  if (senderEncMode) {
     const encMode = parseInt(senderEncMode.value, 10);
-    const kxMode = senderKxMode.value;
-    const isRequired = kxMode === "psk" && encMode !== 0; // Required for PSK + encrypted modes
+    const isPlaintext = encMode === 0;
     
-    if (isRequired) {
-      senderPskIndicator.style.display = "inline";
-      if (senderPskInput) {
-        senderPskInput.required = true;
-        senderPskInput.style.borderColor = senderPskInput.value ? "" : "#ff6b6b";
+    // Hide/show key exchange and PSK fields based on encryption mode
+    if (senderKxModeLabel) {
+      senderKxModeLabel.style.display = isPlaintext ? "none" : "block";
+    }
+    if (senderPskLabel) {
+      senderPskLabel.style.display = isPlaintext ? "none" : "block";
+    }
+    
+    if (!isPlaintext && senderKxMode && senderPskIndicator) {
+      const kxMode = senderKxMode.value;
+      const isRequired = kxMode === "psk"; // Required for PSK key exchange with encrypted modes
+      
+      if (isRequired) {
+        senderPskIndicator.style.display = "inline";
+        senderPskIndicator.textContent = "⚠ REQUIRED for PSK key exchange";
+        if (senderPskInput) {
+          senderPskInput.required = true;
+          senderPskInput.style.borderColor = senderPskInput.value ? "" : "#ff6b6b";
+        }
+      } else {
+        senderPskIndicator.style.display = "none";
+        if (senderPskInput) {
+          senderPskInput.required = false;
+          senderPskInput.style.borderColor = "";
+        }
       }
     } else {
-      senderPskIndicator.style.display = "none";
+      if (senderPskIndicator) {
+        senderPskIndicator.style.display = "none";
+      }
       if (senderPskInput) {
         senderPskInput.required = false;
         senderPskInput.style.borderColor = "";
@@ -867,20 +894,41 @@ function updatePskRequiredIndicator() {
     }
   }
   
-  // Update receiver PSK indicator
-  if (receiverEncMode && receiverKxMode && receiverPskIndicator) {
+  // Update receiver fields visibility and requirements
+  if (receiverEncMode) {
     const encMode = parseInt(receiverEncMode.value, 10);
-    const kxMode = receiverKxMode.value;
-    const isRequired = kxMode === "psk" && encMode !== 0; // Required for PSK + encrypted modes
+    const isPlaintext = encMode === 0;
     
-    if (isRequired) {
-      receiverPskIndicator.style.display = "inline";
-      if (receiverPskInput) {
-        receiverPskInput.required = true;
-        receiverPskInput.style.borderColor = receiverPskInput.value ? "" : "#ff6b6b";
+    // Hide/show key exchange and PSK fields based on decryption mode
+    if (receiverKxModeLabel) {
+      receiverKxModeLabel.style.display = isPlaintext ? "none" : "block";
+    }
+    if (receiverPskLabel) {
+      receiverPskLabel.style.display = isPlaintext ? "none" : "block";
+    }
+    
+    if (!isPlaintext && receiverKxMode && receiverPskIndicator) {
+      const kxMode = receiverKxMode.value;
+      const isRequired = kxMode === "psk"; // Required for PSK key exchange with encrypted modes
+      
+      if (isRequired) {
+        receiverPskIndicator.style.display = "inline";
+        receiverPskIndicator.textContent = "⚠ REQUIRED for PSK key exchange";
+        if (receiverPskInput) {
+          receiverPskInput.required = true;
+          receiverPskInput.style.borderColor = receiverPskInput.value ? "" : "#ff6b6b";
+        }
+      } else {
+        receiverPskIndicator.style.display = "none";
+        if (receiverPskInput) {
+          receiverPskInput.required = false;
+          receiverPskInput.style.borderColor = "";
+        }
       }
     } else {
-      receiverPskIndicator.style.display = "none";
+      if (receiverPskIndicator) {
+        receiverPskIndicator.style.display = "none";
+      }
       if (receiverPskInput) {
         receiverPskInput.required = false;
         receiverPskInput.style.borderColor = "";
