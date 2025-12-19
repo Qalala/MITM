@@ -170,10 +170,18 @@ function createSender(config, ws) {
     
     // Clean up existing connection if any
     if (socket) {
-      cleanup();
+      try {
+        socket.end();
+        socket.destroy();
+      } catch {}
+      socket = null;
     }
     
+    // Reset state for new connection
     handshakeDone = false;
+    sessionKey = null;
+    sharedSecret = null;
+    seqOut = 0;
     running = true;
     
     if (connectTransport === "udp-broadcast") {

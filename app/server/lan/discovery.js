@@ -29,16 +29,27 @@ function startDiscovery(currentRole, currentPort) {
       if (obj.magic === MAGIC) {
         // Handle probe request - respond with our presence
         if (obj.probe && currentRole && currentPort) {
-          broadcastPresence({ socket }, currentRole, currentPort);
+          // Respond directly to the sender of the probe
+          const response = Buffer.from(
+            JSON.stringify({ magic: MAGIC, role: currentRole, ip: getLocalIp(), port: currentPort }),
+            "utf8"
+          );
+          socket.send(response, 0, response.length, rinfo.port, rinfo.address, (err) => {
+            if (err) {
+              // Silently ignore send errors
+            }
+          });
         }
-        // Handle presence announcement
+        // Handle presence announcement (both broadcast and direct responses)
         if (obj.ip && obj.role && !obj.probe) {
-          const key = `${obj.role}@${rinfo.address}:${obj.port}`;
+          // Use the port from the message, or rinfo.port if not provided
+          const devicePort = obj.port || rinfo.port;
+          const key = `${obj.role}@${rinfo.address}:${devicePort}`;
           peers.add(key);
         }
       }
     } catch {
-      // ignore
+      // ignore parse errors
     }
   });
 

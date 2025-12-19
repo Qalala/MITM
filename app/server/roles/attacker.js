@@ -26,6 +26,19 @@ function createAttacker(config, ws) {
   (async () => {
     try {
       server = net.createServer((c) => {
+        // If there's an existing connection, close it first
+        if (clientConn) {
+          try {
+            clientConn.end();
+            clientConn.destroy();
+          } catch {}
+        }
+        if (serverConn) {
+          try {
+            serverConn.end();
+            serverConn.destroy();
+          } catch {}
+        }
         clientConn = c;
         handleNewClient().catch((e) =>
           logUi(ws, "attacker", `Client handling error: ${e.message}`)
@@ -45,23 +58,55 @@ function createAttacker(config, ws) {
   })();
 
   async function handleNewClient() {
+    // Clean up previous connections if any
+    if (clientConn && clientConn !== server.connections?.[0]) {
+      try {
+        clientConn.end();
+        clientConn.destroy();
+      } catch {}
+    }
+    if (serverConn) {
+      try {
+        serverConn.end();
+        serverConn.destroy();
+      } catch {}
+    }
+    
     logUi(ws, "attacker", "Sender connected to attacker, connecting to real receiver");
     serverConn = new net.Socket();
-    await new Promise((resolve, reject) => {
-      serverConn.once("error", reject);
-      serverConn.connect(targetPort, targetIp, () => {
-        serverConn.removeAllListeners("error");
-        resolve();
+    
+    try {
+      await new Promise((resolve, reject) => {
+        serverConn.once("error", reject);
+        serverConn.connect(targetPort, targetIp, () => {
+          serverConn.removeAllListeners("error");
+          resolve();
+        });
       });
-    });
-    logUi(ws, "attacker", "Connected to real receiver, starting bidirectional relay");
+      logUi(ws, "attacker", "Connected to real receiver, starting bidirectional relay");
 
-    relay(clientConn, serverConn, "sender->receiver").catch((e) =>
-      logUi(ws, "attacker", `Relay error (s->r): ${e.message}`)
-    );
-    relay(serverConn, clientConn, "receiver->sender").catch((e) =>
-      logUi(ws, "attacker", `Relay error (r->s): ${e.message}`)
-    );
+      relay(clientConn, serverConn, "sender->receiver").catch((e) =>
+        logUi(ws, "attacker", `Relay error (s->r): ${e.message}`)
+      );
+      relay(serverConn, clientConn, "receiver->sender").catch((e) =>
+        logUi(ws, "attacker", `Relay error (r->s): ${e.message}`)
+      );
+    } catch (e) {
+      logUi(ws, "attacker", `Failed to connect to receiver: ${e.message}`);
+      sendUi(ws, { type: "error", error: `Failed to connect to receiver: ${e.message}` });
+      try {
+        if (clientConn) {
+          clientConn.end();
+          clientConn.destroy();
+        }
+        if (serverConn) {
+          serverConn.end();
+          serverConn.destroy();
+        }
+      } catch {}
+      clientConn = null;
+      serverConn = null;
+    }
   }
 
   async function relay(src, dst, direction) {

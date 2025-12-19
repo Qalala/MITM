@@ -20,8 +20,8 @@ function createReceiver(config, ws) {
   const bindIp = "0.0.0.0";
   const port = config.port || 12347;
   const demo = !!config.demo;
-  // Receiver supports multiple decryption modes
-  const supportedDecryptionModes = config.supportedDecryptionModes || [0];
+  // Receiver uses a single decryption mode (must match sender's encryption mode)
+  const encMode = Number(config.encMode || 0);
   const kxMode = config.kxMode || KX_MODES.PSK;
   const psk = config.psk ? Buffer.from(config.psk) : null;
 
@@ -56,83 +56,109 @@ function createReceiver(config, ws) {
   })();
 
   async function handleConnection() {
+    // Reset state for new connection
+    negotiatedEncMode = null;
+    sessionKey = null;
+    sharedSecret = null;
+    seqIn = 0;
+    
     logUi(ws, "receiver", "Client connected, starting handshake");
     const state = {};
 
-    const frameIter = decodeFrames(conn);
-    const hello = await frameIter.next();
-    if (hello.done || hello.value.type !== FRAME_TYPES.HELLO) {
-      throw new Error("Expected HELLO frame");
-    }
-    const helloPayload = JSON.parse(hello.value.payload.toString("utf8"));
-
-    // Check if sender's encryption mode is in our supported list
-    const senderEncMode = helloPayload.encMode;
-    const senderKxMode = helloPayload.kxMode;
-    
-    if (!supportedDecryptionModes.includes(senderEncMode)) {
-      logUi(ws, "receiver", `Unsupported encryption mode ${senderEncMode} from sender. Supported modes: ${supportedDecryptionModes.join(", ")}`);
-      const err = { reason: "mode_mismatch", message: `Receiver does not support encryption mode ${senderEncMode}` };
-      conn.write(encodeFrame(FRAME_TYPES.ERROR, Buffer.from(JSON.stringify(err))));
-      conn.end();
-      return;
-    }
-    
-    if (senderKxMode !== kxMode) {
-      logUi(ws, "receiver", "Key exchange mode mismatch");
-      const err = { reason: "mode_mismatch", message: `Key exchange mode mismatch: sender uses ${senderKxMode}, receiver uses ${kxMode}` };
-      conn.write(encodeFrame(FRAME_TYPES.ERROR, Buffer.from(JSON.stringify(err))));
-      conn.end();
-      return;
-    }
-
-    // Use the sender's encryption mode (which we support)
-    negotiatedEncMode = senderEncMode;
-    logUi(ws, "receiver", `Negotiated encryption mode: ${negotiatedEncMode}`);
-
-    // NEGOTIATE: confirm mode
-    conn.write(encodeFrame(FRAME_TYPES.NEGOTIATE, buildNegotiate(negotiatedEncMode, kxMode)));
-
-    // KEY_EXCHANGE from receiver
-    const { payload: kxPayload, stateUpdate } = receiverBuildKeyExchange(negotiatedEncMode, kxMode, {
-      psk
-    });
-    Object.assign(state, stateUpdate);
-    conn.write(encodeFrame(FRAME_TYPES.KEY_EXCHANGE, kxPayload));
-
-    // Sender response (if needed)
-    const kxResp = await frameIter.next();
-    let respPayload = null;
-    if (!kxResp.done && kxResp.value.type === FRAME_TYPES.KEY_EXCHANGE) {
-      respPayload = kxResp.value.payload;
-    } else if (kxMode !== KX_MODES.PSK) {
-      throw new Error("Expected KEY_EXCHANGE response");
-    }
-
-    const finalizeUpdate = receiverFinalizeKeyExchange(negotiatedEncMode, kxMode, respPayload, state);
-    Object.assign(state, finalizeUpdate);
-
-    sessionKey = state.sessionKey;
-    sharedSecret = state.sharedSecret;
-
-    conn.write(encodeFrame(FRAME_TYPES.ACK, Buffer.from(JSON.stringify({ ok: true }))));
-    logUi(ws, "receiver", "Handshake complete, ready to receive data");
-    sendUi(ws, { type: "status", status: "Handshake complete - encrypted" });
-
-    // Streaming loop
-    for await (const frame of frameIter) {
-      if (!running) break;
-      if (frame.type === FRAME_TYPES.DATA) {
-        await processDataFrame(frame.payload);
-      } else if (frame.type === FRAME_TYPES.CLOSE) {
-        logUi(ws, "receiver", "Peer closed connection");
-        break;
-      } else if (frame.type === FRAME_TYPES.ERROR) {
-        logUi(ws, "receiver", `Error from peer: ${frame.payload.toString("utf8")}`);
+    try {
+      const frameIter = decodeFrames(conn);
+      const hello = await frameIter.next();
+      if (hello.done || hello.value.type !== FRAME_TYPES.HELLO) {
+        throw new Error("Expected HELLO frame");
       }
-    }
+      const helloPayload = JSON.parse(hello.value.payload.toString("utf8"));
 
-    cleanup();
+      // Check if sender's encryption mode matches receiver's decryption mode
+      const senderEncMode = helloPayload.encMode;
+      const senderKxMode = helloPayload.kxMode;
+      
+      if (senderEncMode !== encMode) {
+        logUi(ws, "receiver", `Encryption mode mismatch: sender uses ${senderEncMode}, receiver expects ${encMode}`);
+        const err = { reason: "mode_mismatch", message: `Encryption mode mismatch: sender uses ${senderEncMode}, receiver expects ${encMode}` };
+        conn.write(encodeFrame(FRAME_TYPES.ERROR, Buffer.from(JSON.stringify(err))));
+        conn.end();
+        conn = null; // Allow new connection
+        return;
+      }
+      
+      if (senderKxMode !== kxMode) {
+        logUi(ws, "receiver", "Key exchange mode mismatch");
+        const err = { reason: "mode_mismatch", message: `Key exchange mode mismatch: sender uses ${senderKxMode}, receiver uses ${kxMode}` };
+        conn.write(encodeFrame(FRAME_TYPES.ERROR, Buffer.from(JSON.stringify(err))));
+        conn.end();
+        conn = null; // Allow new connection
+        return;
+      }
+
+      // Use the receiver's configured decryption mode (must match sender)
+      negotiatedEncMode = encMode;
+      logUi(ws, "receiver", `Using decryption mode: ${negotiatedEncMode}`);
+
+      // NEGOTIATE: confirm mode
+      conn.write(encodeFrame(FRAME_TYPES.NEGOTIATE, buildNegotiate(negotiatedEncMode, kxMode)));
+
+      // KEY_EXCHANGE from receiver
+      const { payload: kxPayload, stateUpdate } = receiverBuildKeyExchange(negotiatedEncMode, kxMode, {
+        psk
+      });
+      Object.assign(state, stateUpdate);
+      conn.write(encodeFrame(FRAME_TYPES.KEY_EXCHANGE, kxPayload));
+
+      // Sender response (if needed)
+      const kxResp = await frameIter.next();
+      let respPayload = null;
+      if (!kxResp.done && kxResp.value.type === FRAME_TYPES.KEY_EXCHANGE) {
+        respPayload = kxResp.value.payload;
+      } else if (kxMode !== KX_MODES.PSK) {
+        throw new Error("Expected KEY_EXCHANGE response");
+      }
+
+      const finalizeUpdate = receiverFinalizeKeyExchange(negotiatedEncMode, kxMode, respPayload, state);
+      Object.assign(state, finalizeUpdate);
+
+      sessionKey = state.sessionKey;
+      sharedSecret = state.sharedSecret;
+
+      conn.write(encodeFrame(FRAME_TYPES.ACK, Buffer.from(JSON.stringify({ ok: true }))));
+      logUi(ws, "receiver", "Handshake complete, ready to receive data");
+      sendUi(ws, { type: "status", status: "Handshake complete - encrypted" });
+
+      // Streaming loop
+      for await (const frame of frameIter) {
+        if (!running) break;
+        if (frame.type === FRAME_TYPES.DATA) {
+          await processDataFrame(frame.payload);
+        } else if (frame.type === FRAME_TYPES.CLOSE) {
+          logUi(ws, "receiver", "Peer closed connection");
+          break;
+        } else if (frame.type === FRAME_TYPES.ERROR) {
+          logUi(ws, "receiver", `Error from peer: ${frame.payload.toString("utf8")}`);
+        }
+      }
+    } catch (e) {
+      logUi(ws, "receiver", `Connection error: ${e.message}`);
+      sendUi(ws, { type: "error", error: e.message });
+    } finally {
+      // Clean up connection but keep server running
+      if (conn) {
+        try {
+          conn.end();
+          conn.destroy();
+        } catch {}
+        conn = null; // Allow new connection
+      }
+      // Reset state for next connection
+      negotiatedEncMode = null;
+      sessionKey = null;
+      sharedSecret = null;
+      seqIn = 0;
+      sendUi(ws, { type: "status", status: `Receiver listening on ${bindIp}:${port}` });
+    }
   }
 
   async function processDataFrame(payload) {
@@ -214,6 +240,11 @@ function createReceiver(config, ws) {
         server = null;
       }
     } catch {}
+    // Reset state
+    negotiatedEncMode = null;
+    sessionKey = null;
+    sharedSecret = null;
+    seqIn = 0;
     logUi(ws, "receiver", "Receiver stopped and sockets closed");
   }
 

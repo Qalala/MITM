@@ -82,6 +82,7 @@ async function initInfo() {
     document.getElementById("transport").value = "tcp";
     
     // Set default values for receiver
+    document.getElementById("receiver-decrypt-mode").value = "0";
     document.getElementById("receiver-kx-mode").value = "psk";
     document.getElementById("receiver-psk-input").value = "";
     document.getElementById("receiver-demo-mode").checked = false;
@@ -204,30 +205,12 @@ setRoleBtn.onclick = () => {
     config.psk = psk;
     config.demo = demo;
   } else if (role === "receiver") {
-    // Get supported decryption methods from checkboxes
-    const supportedDecryptionModes = [];
-    if (document.getElementById("decrypt-plaintext").checked) {
-      supportedDecryptionModes.push(0);
-    }
-    if (document.getElementById("decrypt-gcm").checked) {
-      supportedDecryptionModes.push(1);
-    }
-    if (document.getElementById("decrypt-cbc-hmac").checked) {
-      supportedDecryptionModes.push(2);
-    }
-    if (document.getElementById("decrypt-dh").checked) {
-      supportedDecryptionModes.push(3);
-    }
-    
-    if (supportedDecryptionModes.length === 0) {
-      logLine("Please select at least one decryption method", "error");
-      return;
-    }
-    
+    // Get decryption mode from dropdown
+    const decryptionMode = parseInt(document.getElementById("receiver-decrypt-mode").value, 10);
     const kxMode = document.getElementById("receiver-kx-mode").value;
     const psk = document.getElementById("receiver-psk-input").value;
     const demo = document.getElementById("receiver-demo-mode").checked;
-    config.supportedDecryptionModes = supportedDecryptionModes;
+    config.encMode = decryptionMode;
     config.kxMode = kxMode;
     config.psk = psk;
     config.demo = demo;
