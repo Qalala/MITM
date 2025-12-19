@@ -46,10 +46,11 @@ function startDiscovery(currentRole, currentPort) {
       const obj = JSON.parse(msg.toString("utf8"));
       if (obj.magic === MAGIC) {
         // Handle probe request - respond with our presence
+        // ATTACKER: Do NOT respond to probes (stealth mode - attacker should not be discoverable)
         if (obj.probe) {
-          // Only respond if we have a role configured
+          // Only respond if we have a role configured AND we're not an attacker
           // Reference state.currentRole and state.currentPort so updates are reflected
-          if (state.currentRole && state.currentPort && state.currentRole !== "unknown") {
+          if (state.currentRole && state.currentPort && state.currentRole !== "unknown" && state.currentRole !== "attacker") {
             // Respond directly to the sender of the probe
             // Always use DISCOVERY_PORT as destination - sender should be listening on this port
             // rinfo.port might be DISCOVERY_PORT or might be the ephemeral port the probe came from
@@ -176,6 +177,17 @@ function stopDiscovery(state) {
 
 function broadcastPresence(state, role, mainPort, encInfo = null) {
   if (!state || !state.socket) return;
+  
+  // ATTACKER: Do NOT broadcast presence (stealth mode - attacker should not be discoverable)
+  if (role === "attacker") {
+    // Still update state for internal tracking, but don't broadcast
+    if (state) {
+      state.currentRole = role;
+      state.currentPort = mainPort;
+    }
+    return;
+  }
+  
   const msgObj = { magic: MAGIC, role, ip: getLocalIp(), port: mainPort };
   
   // Include encryption info if provided (for sender/receiver only, not attacker)

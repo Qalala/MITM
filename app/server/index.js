@@ -147,8 +147,9 @@ wss.on("connection", (ws) => {
           }
           
           // Broadcast presence immediately and then periodically
-          // CRITICAL: ALL roles (including sender) must broadcast so they can be discovered
-          if (currentRole && currentRole !== "unknown") {
+          // CRITICAL: Sender and Receiver must broadcast so they can be discovered
+          // ATTACKER: Do NOT broadcast (stealth mode - attacker should not be discoverable)
+          if (currentRole && currentRole !== "unknown" && currentRole !== "attacker") {
             // Include encryption info for sender/receiver only
             let encInfo = null;
             if ((currentRole === "sender" || currentRole === "receiver") && cfg.encMode !== undefined && cfg.kxMode) {
@@ -191,7 +192,8 @@ wss.on("connection", (ws) => {
           const results = await sendDiscoveryPing(discovery);
           
           // Also broadcast our own presence so others can discover us
-          if (currentRole && currentRole !== "unknown") {
+          // ATTACKER: Do NOT broadcast (stealth mode)
+          if (currentRole && currentRole !== "unknown" && currentRole !== "attacker") {
             broadcastPresence(discovery, currentRole, port);
           }
           
@@ -248,6 +250,7 @@ wss.on("connection", (ws) => {
             roleInstance = createSender(cfg, ws);
             
             // Broadcast presence so receiver can discover sender
+            // (Attacker does not broadcast - stealth mode)
             broadcastPresence(discovery, "sender", port);
             broadcastInterval = setInterval(() => {
               if (discovery && discovery.socket) {
