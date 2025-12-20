@@ -40,6 +40,16 @@ function createAttacker(config, ws) {
     sendUi(ws, { type: "attackLog", message, level });
   }
 
+  // Helper function to reset connection state for reconnection
+  function resetConnectionState() {
+    negotiatedEncMode = null;
+    senderFrameBuffer = [];
+    receiverReady = false;
+    lastFrameFromSender = null;
+    lastFrameFromReceiver = null;
+    logAttack(`[RECONNECT] Connection state reset - ready for new connection with any encryption mode`, "info");
+  }
+
   // Extract plaintext from DATA frame if possible
   function extractPlaintext(frame) {
     if (frame.type !== FRAME_TYPES.DATA) {
@@ -69,11 +79,14 @@ function createAttacker(config, ws) {
           // If there's an existing connection, close it first
           if (clientConn) {
             try {
-              logAttack(`[MITM] Closing previous sender connection`, "info");
+              logAttack(`[RECONNECT] Closing previous sender connection to accept new connection`, "info");
+              logAttack(`[RECONNECT] New connection will use new encryption mode if changed`, "info");
               clientConn.end();
               clientConn.destroy();
             } catch {}
             clientConn = null;
+            // Reset encryption mode tracking for new connection
+            negotiatedEncMode = null;
           }
           // Don't close serverConn here - keep receiver connection if it exists
           
@@ -224,6 +237,8 @@ function createAttacker(config, ws) {
       
       // Reset state for new connection
       senderFrameBuffer = [];
+      // Reset encryption mode tracking for new connection (will be detected from HELLO frame)
+      negotiatedEncMode = null;
       // Don't reset receiverReady here - keep it if receiver is already connected
       
       // Use targetIp as the victim's IP (receiver that attacker proxies to)
@@ -326,19 +341,25 @@ function createAttacker(config, ws) {
         
         // Set up error handlers for receiver connection
         serverConn.on("error", (err) => {
-          logAttack(`Receiver connection error: ${err.message}`, "failed");
+          logAttack(`[DISCONNECT] Receiver connection error: ${err.message}`, "failed");
+          logAttack(`[RECONNECT] Receiver disconnected. Will auto-reconnect when sender connects, or click 'Connect to Receiver' to reconnect now.`, "info");
           receiverReady = false;
           if (serverConn) {
             serverConn = null;
           }
-          sendUi(ws, { type: "error", error: `Receiver connection lost: ${err.message}` });
+          // Reset encryption mode tracking
+          negotiatedEncMode = null;
+          sendUi(ws, { type: "error", error: `Receiver connection lost: ${err.message}. Will auto-reconnect on next sender connection.` });
         });
         
         serverConn.on("close", () => {
-          logAttack("Receiver connection closed", "warning");
+          logAttack("[DISCONNECT] Receiver connection closed", "warning");
+          logAttack(`[RECONNECT] Receiver disconnected. Will auto-reconnect when sender connects, or click 'Connect to Receiver' to reconnect now.`, "info");
           receiverReady = false;
           serverConn = null;
-          sendUi(ws, { type: "status", status: "Receiver connection closed. Click 'Connect to Receiver' to reconnect." });
+          // Reset encryption mode tracking
+          negotiatedEncMode = null;
+          sendUi(ws, { type: "status", status: "Receiver connection closed. Will auto-reconnect when sender connects, or click 'Connect to Receiver' to reconnect now." });
         });
         
         // Start listening for frames from receiver (for relay back to sender)
@@ -397,6 +418,11 @@ function createAttacker(config, ws) {
       logAttack(`[MITM] Sender connected, starting bidirectional relay`, "success");
       logAttack(`[MITM] Relay active: Sender <-> Attacker <-> Receiver`, "success");
       logAttack(`[MITM] Attack mode: ${mode} - attacks will be applied to intercepted traffic`, "success");
+      if (mode === "modify") {
+        logAttack(`[MITM] Interception will attempt to modify ALL messages (plaintext and encrypted)`, "info");
+        logAttack(`[MITM] Plaintext messages: Will be modified successfully`, "info");
+        logAttack(`[MITM] Encrypted messages: Interception will fail (showing encryption protection works)`, "info");
+      }
       if (mode === "drop" && dropRate > 0) {
         logAttack(`[MITM] Drop rate: ${dropRate}%`, "info");
       }
@@ -427,6 +453,8 @@ function createAttacker(config, ws) {
         }
         serverConn = null;
         isHandlingClient = false;
+        // Reset all connection state for easy reconnection
+        resetConnectionState();
       };
 
       // Replace early handlers with proper cleanup handlers
@@ -436,15 +464,21 @@ function createAttacker(config, ws) {
       
       const onClientError = (err) => {
         try {
-          logAttack(`Sender connection error: ${err.message}`, "failed");
+          logAttack(`[DISCONNECT] Sender connection error: ${err.message}`, "failed");
+          logAttack(`[RECONNECT] Ready to accept new sender connection (encryption mode changes may require reconnection)`, "info");
         } catch {}
         cleanupConnections();
+        // Reset encryption mode tracking for new connection
+        negotiatedEncMode = null;
       };
       const onClientClose = () => {
         try {
-          logAttack("Sender connection closed", "warning");
+          logAttack("[DISCONNECT] Sender connection closed", "warning");
+          logAttack(`[RECONNECT] Ready to accept new sender connection. Sender can reconnect with any encryption mode.`, "info");
         } catch {}
         cleanupConnections();
+        // Reset encryption mode tracking for new connection
+        negotiatedEncMode = null;
       };
 
       clientConn.on("error", onClientError);
@@ -499,8 +533,24 @@ function createAttacker(config, ws) {
     if (frame.type === FRAME_TYPES.HELLO) {
       try {
         const hello = JSON.parse(frame.payload.toString("utf8"));
+        const previousEncMode = negotiatedEncMode;
         negotiatedEncMode = hello.encMode;
-        logAttack(`Detected encryption mode: ${negotiatedEncMode} (${negotiatedEncMode === ENC_MODES.PLAINTEXT ? "Plaintext" : "Encrypted"})`, "info");
+        const encModeName = negotiatedEncMode === ENC_MODES.PLAINTEXT ? "Plaintext" :
+                           negotiatedEncMode === ENC_MODES.AES_GCM ? "AES-GCM" :
+                           negotiatedEncMode === ENC_MODES.AES_CBC_HMAC ? "AES-CBC+HMAC" :
+                           negotiatedEncMode === ENC_MODES.DIFFIE_HELLMAN ? "Diffie-Hellman" :
+                           `Mode ${negotiatedEncMode}`;
+        
+        if (previousEncMode !== null && previousEncMode !== negotiatedEncMode) {
+          logAttack(`[RECONNECT] Encryption mode changed: ${previousEncMode} → ${negotiatedEncMode} (${encModeName})`, "info");
+          logAttack(`[RECONNECT] New connection established with updated encryption settings`, "success");
+        } else {
+          logAttack(`[INTERCEPTION] Detected encryption mode: ${encModeName}`, "info");
+        }
+        
+        if (negotiatedEncMode !== ENC_MODES.PLAINTEXT) {
+          logAttack(`[INTERCEPTION] Messages will be encrypted - modification attempts will fail without decryption key`, "warning");
+        }
       } catch (e) {
         // Ignore parse errors
       }
@@ -510,9 +560,13 @@ function createAttacker(config, ws) {
     if (mode === "passive" && frame.type === FRAME_TYPES.DATA) {
       const plaintext = extractPlaintext(frame);
       if (plaintext !== null) {
-        logAttack(`[PASSIVE] Plaintext message: "${plaintext}"`, "success");
+        logAttack(`[PASSIVE] Plaintext message intercepted: "${plaintext}"`, "success");
       } else {
-        logAttack(`[PASSIVE] Encrypted DATA frame (cannot decrypt)`, "warning");
+        const encModeName = negotiatedEncMode === ENC_MODES.AES_GCM ? "AES-GCM" :
+                           negotiatedEncMode === ENC_MODES.AES_CBC_HMAC ? "AES-CBC+HMAC" :
+                           negotiatedEncMode === ENC_MODES.DIFFIE_HELLMAN ? "Diffie-Hellman" :
+                           "Encrypted";
+        logAttack(`[PASSIVE] Encrypted DATA frame (${encModeName}) - cannot decrypt without key`, "warning");
       }
     }
     
@@ -563,28 +617,63 @@ function createAttacker(config, ws) {
         await new Promise((r) => setTimeout(r, delayMs));
       }
       
-      // MODIFY mode: Modify plaintext DATA frames
+      // MODIFY mode: Attempt to intercept and modify ALL DATA frames (plaintext and encrypted)
       if (mode === "modify" && frame.type === FRAME_TYPES.DATA && shouldForward) {
+        // Always attempt interception - works for all encryption modes
+        const isPlaintext = negotiatedEncMode === ENC_MODES.PLAINTEXT || negotiatedEncMode === null;
+        const encModeName = negotiatedEncMode === ENC_MODES.PLAINTEXT ? "Plaintext" :
+                           negotiatedEncMode === ENC_MODES.AES_GCM ? "AES-GCM" :
+                           negotiatedEncMode === ENC_MODES.AES_CBC_HMAC ? "AES-CBC+HMAC" :
+                           negotiatedEncMode === ENC_MODES.DIFFIE_HELLMAN ? "Diffie-Hellman" :
+                           negotiatedEncMode !== null ? `Mode ${negotiatedEncMode}` : "Unknown";
+        
+        // Log interception attempt for all encryption modes
+        logAttack(`[INTERCEPTION ATTEMPT] Intercepting DATA frame (${encModeName})`, "info");
+        
         try {
           const plaintext = extractPlaintext(frame);
-          if (plaintext !== null) {
+          if (plaintext !== null || isPlaintext) {
             // This is plaintext - we can modify it
-            const obj = JSON.parse(frame.payload.toString("utf8"));
-            const originalText = obj.text;
-            obj.text = modifyText;
-            const newPayload = Buffer.from(JSON.stringify(obj), "utf8");
-            outFrame = { ...frame, payload: newPayload };
-            logAttack(`[MODIFY] Modified plaintext DATA frame: "${originalText}" -> "${modifyText}"`, "success");
-            sendUi(ws, { type: "attackSuccess", message: `Successfully modified plaintext message: "${originalText}" -> "${modifyText}"` });
+            try {
+              const obj = JSON.parse(frame.payload.toString("utf8"));
+              const originalText = obj.text || "[unknown]";
+              obj.text = modifyText;
+              const newPayload = Buffer.from(JSON.stringify(obj), "utf8");
+              outFrame = { ...frame, payload: newPayload };
+              logAttack(`[INTERCEPTION SUCCESS] Modified plaintext message: "${originalText}" -> "${modifyText}"`, "success");
+              sendUi(ws, { 
+                type: "attackSuccess", 
+                message: `✓ INTERCEPTION SUCCESS: Modified plaintext message "${originalText}" -> "${modifyText}"` 
+              });
+            } catch (parseError) {
+              // Couldn't parse as JSON - might be malformed plaintext
+              logAttack(`[INTERCEPTION FAILED] Cannot parse message (malformed or encrypted): ${parseError.message}`, "failed");
+              sendUi(ws, { 
+                type: "attackFailed", 
+                message: `✗ INTERCEPTION FAILED: Cannot parse message - may be encrypted or malformed` 
+              });
+            }
           } else {
-            // Encrypted payload - cannot modify
-            logAttack("[MODIFY] Attack failed: message is encrypted (cannot modify ciphertext)", "failed");
-            sendUi(ws, { type: "attackFailed", message: "Modify attack failed: message is encrypted (cannot modify ciphertext without decryption key)" });
+            // Encrypted payload - cannot modify without decryption key
+            const encModeName = negotiatedEncMode === ENC_MODES.AES_GCM ? "AES-GCM" : 
+                               negotiatedEncMode === ENC_MODES.AES_CBC_HMAC ? "AES-CBC+HMAC" : 
+                               "Encrypted";
+            logAttack(`[INTERCEPTION FAILED] Message is encrypted (${encModeName}) - cannot modify ciphertext without decryption key`, "failed");
+            sendUi(ws, { 
+              type: "attackFailed", 
+              message: `✗ INTERCEPTION FAILED: Message is encrypted (${encModeName}). Cannot modify ciphertext without decryption key. Encryption is protecting the message.` 
+            });
           }
         } catch (e) {
           // If we can't parse as JSON, it's likely encrypted
-          logAttack(`[MODIFY] Attack failed: cannot parse payload (likely encrypted): ${e.message}`, "failed");
-          sendUi(ws, { type: "attackFailed", message: "Modify attack failed: cannot parse encrypted payload" });
+          const encModeName = negotiatedEncMode === ENC_MODES.AES_GCM ? "AES-GCM" : 
+                             negotiatedEncMode === ENC_MODES.AES_CBC_HMAC ? "AES-CBC+HMAC" : 
+                             "Encrypted";
+          logAttack(`[INTERCEPTION FAILED] Cannot parse payload (encrypted with ${encModeName}): ${e.message}`, "failed");
+          sendUi(ws, { 
+            type: "attackFailed", 
+            message: `✗ INTERCEPTION FAILED: Message is encrypted (${encModeName}). Cannot modify without decryption key.` 
+          });
         }
       }
       
@@ -737,14 +826,15 @@ function createAttacker(config, ws) {
     // Clean up existing receiver connection if any
     if (serverConn) {
       try {
+        logAttack(`[RECONNECT] Closing existing receiver connection before reconnecting`, "info");
         serverConn.end();
         serverConn.destroy();
       } catch {}
       serverConn = null;
     }
     
-    receiverReady = false;
-    senderFrameBuffer = [];
+    // Reset state for clean reconnection
+    resetConnectionState();
     
     const forwardIp = targetIp;
     logAttack(`[MITM] Connecting to receiver at ${forwardIp}:${targetPort}...`, "info");
@@ -780,19 +870,25 @@ function createAttacker(config, ws) {
       sendUi(ws, { type: "status", status: `Connected to receiver at ${forwardIp}:${targetPort}. Waiting for sender to connect...` });
       
       // Set up error handlers for receiver connection
-      serverConn.on("error", (err) => {
-        logAttack(`Receiver connection error: ${err.message}`, "failed");
-        receiverReady = false;
-        serverConn = null;
-        sendUi(ws, { type: "error", error: `Receiver connection lost: ${err.message}` });
-      });
-      
-      serverConn.on("close", () => {
-        logAttack("Receiver connection closed", "warning");
-        receiverReady = false;
-        serverConn = null;
-        sendUi(ws, { type: "status", status: "Receiver connection closed. Click 'Connect to Receiver' to reconnect." });
-      });
+        serverConn.on("error", (err) => {
+          logAttack(`[DISCONNECT] Receiver connection error: ${err.message}`, "failed");
+          logAttack(`[RECONNECT] Receiver disconnected. Will auto-reconnect when sender connects, or click 'Connect to Receiver' to reconnect now.`, "info");
+          receiverReady = false;
+          serverConn = null;
+          // Reset encryption mode tracking
+          negotiatedEncMode = null;
+          sendUi(ws, { type: "error", error: `Receiver connection lost: ${err.message}. Will auto-reconnect on next sender connection.` });
+        });
+        
+        serverConn.on("close", () => {
+          logAttack("[DISCONNECT] Receiver connection closed", "warning");
+          logAttack(`[RECONNECT] Receiver disconnected. Will auto-reconnect when sender connects, or click 'Connect to Receiver' to reconnect now.`, "info");
+          receiverReady = false;
+          serverConn = null;
+          // Reset encryption mode tracking
+          negotiatedEncMode = null;
+          sendUi(ws, { type: "status", status: "Receiver connection closed. Will auto-reconnect when sender connects, or click 'Connect to Receiver' to reconnect now." });
+        });
       
       // Start listening for frames from receiver (for relay back to sender)
       // This will be used when sender connects
