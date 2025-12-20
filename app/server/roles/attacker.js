@@ -63,39 +63,59 @@ function createAttacker(config, ws) {
   (async () => {
     try {
       server = net.createServer((c) => {
-        // If there's an existing connection, close it first
-        if (clientConn) {
+        try {
+          logAttack(`[MITM] New connection received from ${c.remoteAddress}:${c.remotePort}`, "info");
+          
+          // If there's an existing connection, close it first
+          if (clientConn) {
+            try {
+              logAttack(`[MITM] Closing previous sender connection`, "info");
+              clientConn.end();
+              clientConn.destroy();
+            } catch {}
+            clientConn = null;
+          }
+          // Don't close serverConn here - keep receiver connection if it exists
+          
+          // Prevent concurrent handling
+          if (isHandlingClient) {
+            logAttack("New connection rejected: already handling a connection", "warning");
+            try {
+              c.end();
+              c.destroy();
+            } catch {}
+            return;
+          }
+          
+          clientConn = c;
+          isHandlingClient = true;
+          handleNewClient().catch((e) => {
+            // Better error handling to prevent WebSocket disconnection
+            try {
+              logUi(ws, "attacker", `Client handling error: ${e.message}`);
+              log("attacker", `Client handling error: ${e.message}`);
+              if (e.stack) {
+                log("attacker", `Stack: ${e.stack}`);
+              }
+            } catch (logError) {
+              // If logging fails, at least log to console
+              console.error("Attacker error logging failed:", logError);
+              console.error("Original error:", e);
+            }
+          }).finally(() => {
+            isHandlingClient = false;
+          });
+        } catch (e) {
+          // Catch any errors in the connection handler itself
           try {
-            clientConn.end();
-            clientConn.destroy();
+            log("attacker", `Error in connection handler: ${e.message}`);
+            console.error("Error in connection handler:", e);
+            try {
+              c.end();
+              c.destroy();
+            } catch {}
           } catch {}
-          clientConn = null;
         }
-        if (serverConn) {
-          try {
-            serverConn.end();
-            serverConn.destroy();
-          } catch {}
-          serverConn = null;
-        }
-        
-        // Prevent concurrent handling
-        if (isHandlingClient) {
-          logUi(ws, "attacker", "New connection rejected: already handling a connection");
-          try {
-            c.end();
-            c.destroy();
-          } catch {}
-          return;
-        }
-        
-        clientConn = c;
-        isHandlingClient = true;
-        handleNewClient().catch((e) => {
-          logUi(ws, "attacker", `Client handling error: ${e.message}`);
-        }).finally(() => {
-          isHandlingClient = false;
-        });
       });
       // Use backlog=1 to enforce single connection semantics (like receiver)
       // Attacker always listens on 0.0.0.0 (all interfaces) - works on any machine
@@ -119,50 +139,68 @@ function createAttacker(config, ws) {
         }
       });
       server.on("error", (err) => {
-        logUi(ws, "attacker", `Server error: ${err.message}`);
-        sendUi(ws, { type: "error", error: `Server error: ${err.message}` });
+        try {
+          logUi(ws, "attacker", `Server error: ${err.message}`);
+          sendUi(ws, { type: "error", error: `Server error: ${err.message}` });
+        } catch (e) {
+          log("attacker", `Server error: ${err.message}`);
+          console.error("Error sending server error to UI:", e);
+        }
       });
     } catch (e) {
-      logUi(ws, "attacker", `Attacker failed to start: ${e.message}`);
-      sendUi(ws, { type: "error", error: e.message });
+      try {
+        logUi(ws, "attacker", `Attacker failed to start: ${e.message}`);
+        sendUi(ws, { type: "error", error: e.message });
+      } catch (sendError) {
+        log("attacker", `Attacker failed to start: ${e.message}`);
+        console.error("Error sending startup error to UI:", sendError);
+      }
     }
-  })();
+  })().catch((e) => {
+    // Catch any unhandled errors in the async IIFE
+    log("attacker", `Unhandled error in attacker initialization: ${e.message}`);
+    if (e.stack) {
+      log("attacker", `Stack: ${e.stack}`);
+    }
+    console.error("Unhandled error in attacker:", e);
+  });
 
   async function handleNewClient() {
-    // Clean up previous connections if any
-    if (clientConn && clientConn !== server.connections?.[0]) {
-      try {
-        clientConn.end();
-        clientConn.destroy();
-      } catch {}
-    }
-    if (serverConn) {
-      try {
-        serverConn.end();
-        serverConn.destroy();
-      } catch {}
-    }
-    
-    // Reset state for new connection
-    senderFrameBuffer = [];
-    receiverReady = false;
-    
-    // Use targetIp as the victim's IP (receiver that attacker proxies to)
-    const actualTargetIp = targetIp;
-    
-    if (!actualTargetIp) {
-      logUi(ws, "attacker", "ERROR: Victim IP (target IP) not configured. Please enter victim's IP address.");
-      sendUi(ws, { type: "error", error: "Victim IP (target IP) not configured. Please enter the victim's IP address in Target IP field." });
-      try {
-        if (clientConn) {
+    try {
+      // Clean up previous connections if any
+      if (clientConn && clientConn !== server.connections?.[0]) {
+        try {
           clientConn.end();
           clientConn.destroy();
-        }
-      } catch {}
-      clientConn = null;
-      isHandlingClient = false;
-      return;
-    }
+        } catch {}
+      }
+      if (serverConn) {
+        try {
+          serverConn.end();
+          serverConn.destroy();
+        } catch {}
+      }
+      
+      // Reset state for new connection
+      senderFrameBuffer = [];
+      // Don't reset receiverReady here - keep it if receiver is already connected
+      
+      // Use targetIp as the victim's IP (receiver that attacker proxies to)
+      const actualTargetIp = targetIp;
+      
+      if (!actualTargetIp) {
+        logUi(ws, "attacker", "ERROR: Victim IP (target IP) not configured. Please enter victim's IP address.");
+        sendUi(ws, { type: "error", error: "Victim IP (target IP) not configured. Please enter the victim's IP address in Target IP field." });
+        try {
+          if (clientConn) {
+            clientConn.end();
+            clientConn.destroy();
+          }
+        } catch {}
+        clientConn = null;
+        isHandlingClient = false;
+        return;
+      }
     
     logAttack(`[MITM] Sender connected to attacker`, "success");
     
@@ -289,68 +327,97 @@ function createAttacker(config, ws) {
       logAttack(`[MITM] Receiver already connected`, "info");
     }
     
-    logAttack(`[MITM] Attacker is in the middle: Sender -> Attacker -> Receiver`, "success");
-    
-    // Activate attacks automatically when MITM connection is established
-    if (!attackActive) {
-      attackActive = true;
-      logAttack(`[MITM] Attacks activated automatically - mode: ${mode}`, "success");
-    }
-    
-    logAttack(`[MITM] Sender connected, starting bidirectional relay`, "success");
-    logAttack(`[MITM] Relay active: Sender <-> Attacker <-> Receiver`, "success");
-    logAttack(`[MITM] Attack mode: ${mode} - attacks will be applied to intercepted traffic`, "success");
-    if (mode === "drop" && dropRate > 0) {
-      logAttack(`[MITM] Drop rate: ${dropRate}%`, "info");
-    }
-    if (mode === "delay" && delayMs > 0) {
-      logAttack(`[MITM] Delay: ${delayMs}ms`, "info");
-    }
-    if (mode === "modify") {
-      logAttack(`[MITM] Modify text: "${modifyText}"`, "info");
-    }
-    sendUi(ws, { type: "status", status: `MITM active: sender <-> attacker <-> receiver. Attack mode: ${mode} - ACTIVE` });
+      logAttack(`[MITM] Attacker is in the middle: Sender -> Attacker -> Receiver`, "success");
 
-    // Add error and close handlers to detect connection failures
-    const cleanupConnections = () => {
-      if (clientConn) {
+      // Activate attacks automatically when MITM connection is established
+      if (!attackActive) {
+        attackActive = true;
+        logAttack(`[MITM] Attacks activated automatically - mode: ${mode}`, "success");
+      }
+      
+      logAttack(`[MITM] Sender connected, starting bidirectional relay`, "success");
+      logAttack(`[MITM] Relay active: Sender <-> Attacker <-> Receiver`, "success");
+      logAttack(`[MITM] Attack mode: ${mode} - attacks will be applied to intercepted traffic`, "success");
+      if (mode === "drop" && dropRate > 0) {
+        logAttack(`[MITM] Drop rate: ${dropRate}%`, "info");
+      }
+      if (mode === "delay" && delayMs > 0) {
+        logAttack(`[MITM] Delay: ${delayMs}ms`, "info");
+      }
+      if (mode === "modify") {
+        logAttack(`[MITM] Modify text: "${modifyText}"`, "info");
+      }
+      sendUi(ws, { type: "status", status: `MITM active: sender <-> attacker <-> receiver. Attack mode: ${mode} - ACTIVE` });
+
+      // Add error and close handlers to detect connection failures
+      const cleanupConnections = () => {
+        if (clientConn) {
+          try {
+            clientConn.removeAllListeners();
+            clientConn.end();
+            clientConn.destroy();
+          } catch {}
+          clientConn = null;
+        }
+        if (serverConn) {
+          try {
+            serverConn.removeAllListeners();
+            serverConn.end();
+            serverConn.destroy();
+          } catch {}
+          serverConn = null;
+        }
+        isHandlingClient = false;
+      };
+
+      const onClientError = (err) => {
         try {
-          clientConn.removeAllListeners();
+          logAttack(`Sender connection error: ${err.message}`, "failed");
+        } catch {}
+        cleanupConnections();
+      };
+      const onClientClose = () => {
+        try {
+          logAttack("Sender connection closed", "warning");
+        } catch {}
+        cleanupConnections();
+      };
+
+      clientConn.on("error", onClientError);
+      clientConn.on("close", onClientClose);
+      // Note: serverConn error/close handlers are already set up in connectToReceiver
+
+      // Wait for sender relay to complete
+      senderRelayPromise.catch((e) => {
+        try {
+          logUi(ws, "attacker", `Sender relay error: ${e.message}`);
+        } catch {}
+      }).finally(() => {
+        cleanupConnections();
+      });
+    } catch (e) {
+      // Catch any errors in handleNewClient to prevent WebSocket disconnection
+      try {
+        logUi(ws, "attacker", `Error in handleNewClient: ${e.message}`);
+        log("attacker", `Error in handleNewClient: ${e.message}`);
+        if (e.stack) {
+          log("attacker", `Stack: ${e.stack}`);
+        }
+      } catch (logError) {
+        console.error("Error logging failed:", logError);
+        console.error("Original error:", e);
+      }
+      
+      // Clean up on error
+      try {
+        if (clientConn) {
           clientConn.end();
           clientConn.destroy();
-        } catch {}
-        clientConn = null;
-      }
-      if (serverConn) {
-        try {
-          serverConn.removeAllListeners();
-          serverConn.end();
-          serverConn.destroy();
-        } catch {}
-        serverConn = null;
-      }
+        }
+      } catch {}
+      clientConn = null;
       isHandlingClient = false;
-    };
-
-    const onClientError = (err) => {
-      logAttack(`Sender connection error: ${err.message}`, "failed");
-      cleanupConnections();
-    };
-    const onClientClose = () => {
-      logAttack("Sender connection closed", "warning");
-      cleanupConnections();
-    };
-
-    clientConn.on("error", onClientError);
-    clientConn.on("close", onClientClose);
-    // Note: serverConn error/close handlers are already set up in connectToReceiver
-
-    // Wait for sender relay to complete
-    senderRelayPromise.catch((e) => {
-      logUi(ws, "attacker", `Sender relay error: ${e.message}`);
-    }).finally(() => {
-      cleanupConnections();
-    });
+    }
   }
   
   // Helper function to process and forward a frame with attack logic
