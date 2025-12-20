@@ -17,7 +17,7 @@ function createAttacker(config, ws) {
   const listenPort = config.port || 12347;
   let targetIp = config.targetIp || null; // Receiver's IP (victim) - where to forward intercepted traffic
   let targetPort = config.port || 12347;
-  let mode = config.attackMode || "passive";
+  let mode = config.attackMode || "modify";
   let dropRate = Number(config.dropRate || 0);
   let delayMs = Number(config.delayMs || 0);
   let modifyText = (config.modifyText && config.modifyText.trim()) || "[MITM modified]";
@@ -97,6 +97,42 @@ function createAttacker(config, ws) {
           
           clientConn = c;
           isHandlingClient = true;
+          
+          // CRITICAL: Protect connection IMMEDIATELY - prevent it from being destroyed
+          // Set up error/close handlers to catch any issues before handleNewClient() runs
+          const onClientErrorImmediate = (err) => {
+            try {
+              logAttack(`[MITM] Sender connection error: ${err.message}`, "failed");
+            } catch {}
+            // Connection error - mark for cleanup but don't destroy yet
+            // Let handleNewClient() handle proper cleanup
+            if (clientConn === c) {
+              // Connection is now invalid, but keep reference for cleanup
+            }
+          };
+          const onClientCloseImmediate = () => {
+            try {
+              logAttack(`[MITM] Sender disconnected`, "warning");
+            } catch {}
+            // Client disconnected - mark connection as closed
+            if (clientConn === c) {
+              clientConn = null;
+            }
+          };
+          
+          // Set up handlers IMMEDIATELY to prevent unhandled errors from destroying connection
+          c.on("error", onClientErrorImmediate);
+          c.on("close", onClientCloseImmediate);
+          
+          // Configure connection to stay alive and healthy
+          c.setKeepAlive(true, 60000); // Keep connection alive with 60s keepalive
+          c.setNoDelay(true); // Disable Nagle's algorithm for lower latency
+          c.setTimeout(0); // Disable timeout - we'll handle timeouts ourselves if needed
+          
+          // Pause the connection temporarily to prevent data loss during setup
+          // We'll resume it in handleNewClient() once everything is ready
+          c.pause();
+          
           handleNewClient().catch((e) => {
             // Better error handling to prevent WebSocket disconnection
             try {
@@ -174,16 +210,16 @@ function createAttacker(config, ws) {
 
   async function handleNewClient() {
     try {
-      // Clean up previous client connection if any (but keep serverConn if receiver is already connected)
-      if (clientConn && !clientConn.destroyed) {
-        try {
-          // Only close if it's a different connection
-          if (clientConn !== server.connections?.[0]) {
-            clientConn.end();
-            clientConn.destroy();
-          }
-        } catch {}
+      // Check connection validity immediately at the start
+      // The connection might have been destroyed by the client disconnecting
+      if (!clientConn || clientConn.destroyed || clientConn.closed) {
+        // Client disconnected before we could process the connection - this is normal
+        logAttack(`[MITM] Client disconnected before connection could be established`, "info");
+        clientConn = null;
+        isHandlingClient = false;
+        return;
       }
+      
       // Don't close serverConn here - keep receiver connection if it exists
       
       // Reset state for new connection
@@ -207,15 +243,21 @@ function createAttacker(config, ws) {
         return;
       }
       
-      // Ensure clientConn is valid before proceeding
-      if (!clientConn || clientConn.destroyed) {
-        logAttack(`[MITM] Client connection invalid or destroyed`, "warning");
+      // Double-check connection is still valid after configuration check
+      if (!clientConn || clientConn.destroyed || clientConn.closed) {
+        logAttack(`[MITM] Client disconnected during setup`, "info");
         clientConn = null;
         isHandlingClient = false;
         return;
       }
     
     logAttack(`[MITM] Sender connected to attacker`, "success");
+    
+    // Resume connection now that we're ready to process data
+    // We paused it earlier to prevent data loss during setup
+    if (clientConn && !clientConn.destroyed && !clientConn.closed) {
+      clientConn.resume();
+    }
     
     // Start buffering frames from sender immediately (before receiver connection is ready)
     const senderRelayPromise = (async () => {
@@ -387,6 +429,11 @@ function createAttacker(config, ws) {
         isHandlingClient = false;
       };
 
+      // Replace early handlers with proper cleanup handlers
+      // Remove the immediate handlers we set up earlier
+      clientConn.removeAllListeners("error");
+      clientConn.removeAllListeners("close");
+      
       const onClientError = (err) => {
         try {
           logAttack(`Sender connection error: ${err.message}`, "failed");
