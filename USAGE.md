@@ -226,12 +226,12 @@ Open `http://<server-ip>:3000/` in a browser. **On first launch, only the role s
   - `Demo mode` (`#demo-mode`): enables more verbose logging/steps.
 
 - **3. Decryption Configuration** (appears for Receiver after setting role)
-  - `Decryption mode` (`#receiver-decrypt-mode`): Select the decryption method (single mode)
+  - `Decryption mode` (`#receiver-decrypt-mode`): Select a single decryption method that must match the sender's encryption mode exactly
     - **0 – Plaintext (No encryption)**: Key exchange and PSK fields are **hidden**
     - **1 – AES-GCM Decryption**: Key exchange and PSK fields are **shown**
     - **2 – AES-CBC + HMAC-SHA256 Decryption**: Key exchange and PSK fields are **shown**
     - **3 – Diffie-Hellman Decryption**: Key exchange and PSK fields are **shown**
-  - The receiver will accept connections from senders using the **exact same encryption mode**.
+  - The receiver will **only** accept connections from senders using the **exact same encryption mode**.
   - `Key exchange` (`#receiver-kx-mode`): **Only shown for encrypted modes (1-3)**
     - Must match the sender's key exchange method exactly.
   - `Pre‑shared key` (`#receiver-psk-input`): **Only shown for encrypted modes (1-3)**
@@ -268,7 +268,7 @@ Below are concrete test scripts you can follow. In all scenarios:
 
 - **Receiver** listens on `0.0.0.0:12347` (default).
 - **Sender's Target IP** points either directly to Receiver (no MITM) or to Attacker (for MITM).
-- **Sender's Encryption mode** must be one of the **Receiver's supported decryption modes** (selected via checkboxes).
+- **Sender's Encryption mode** must exactly match the **Receiver's selected decryption mode** (selected via dropdown).
 - **Key exchange** must match between Sender and Receiver.
 
 ### 3.1. Plaintext chat without MITM (baseline)
@@ -281,8 +281,8 @@ Below are concrete test scripts you can follow. In all scenarios:
    - Section **2. Network Setup**:
      - Ensure **Transport = TCP**.
      - Leave **Port = 12347**.
-   - Section **3. Decryption Capabilities**:
-     - Check **Plaintext (No encryption) – Mode 0** (and any other modes you want to support).
+   - Section **3. Decryption Configuration**:
+     - Select **Plaintext (No encryption) – Mode 0** from the dropdown.
      - **Key exchange = Pre‑shared key** (PSK is ignored in plaintext).
    - Confirm status shows **"Receiver listening on 0.0.0.0:12347"**.
 
@@ -312,7 +312,7 @@ Below are concrete test scripts you can follow. In all scenarios:
 
 1. **Receiver (Laptop 1)**
    - As in 3.1, configure **Receiver**, **TCP**, **Port 12347**.
-   - **Decryption Capabilities**: Check **Plaintext (No encryption) – Mode 0**.
+   - **Decryption Configuration**: Select **Plaintext (No encryption) – Mode 0** from the dropdown.
    - **Key exchange = Pre‑shared key**.
 
 2. **Attacker (Mobile or Laptop 2)**
@@ -349,8 +349,8 @@ Below are concrete test scripts you can follow. In all scenarios:
 
 1. **Receiver**
    - Role: **Receiver**, Port = `12347`, Transport = TCP.
-   - Decryption Capabilities:
-     - Check **AES-GCM Decryption – Mode 1** (and any other modes you want to support).
+   - Decryption Configuration:
+     - Select **AES-GCM Decryption – Mode 1** from the dropdown.
      - **Key exchange = Pre‑shared key**.
      - Set **PSK = demo-psk** (or another shared string, but use the same for Sender).
 
@@ -384,8 +384,8 @@ Below are concrete test scripts you can follow. In all scenarios:
 
 1. **Receiver**
    - Role: **Receiver**, Port = `12347`, Transport = TCP.
-   - Decryption Capabilities:
-     - Check **AES-CBC + HMAC-SHA256 Decryption – Mode 2** (and any other modes you want to support).
+   - Decryption Configuration:
+     - Select **AES-CBC + HMAC-SHA256 Decryption – Mode 2** from the dropdown.
      - **Key exchange = Pre‑shared key** (or RSA/DH if you prefer).
      - Set **PSK** to some value, e.g. `cbc-psk`.
 
@@ -418,8 +418,8 @@ Below are concrete test scripts you can follow. In all scenarios:
 1. **Unauthenticated DH setup**
    - Receiver:
      - Role: **Receiver**, Port `12347`, Transport TCP.
-     - Decryption Capabilities:
-       - Check **Diffie-Hellman Decryption – Mode 3** (and any other modes you want to support).
+     - Decryption Configuration:
+       - Select **Diffie-Hellman Decryption – Mode 3** from the dropdown.
        - **Key exchange = dh** (if used).
    - Sender:
      - Role: **Sender**, Target IP = `<receiver-ip>`, **Encryption mode = 3 – Diffie‑Hellman (demo)**, same kx as Receiver.

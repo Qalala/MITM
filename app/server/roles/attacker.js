@@ -33,6 +33,12 @@ function createAttacker(config, ws) {
   let negotiatedEncMode = null; // Track encryption mode from handshake
   let senderFrameBuffer = []; // Buffer frames from sender until receiver connection is ready
   let receiverReady = false; // Track if receiver connection is established
+  let handshakeState = {
+    senderHelloReceived: false,
+    receiverNegotiateReceived: false,
+    keyExchangeInProgress: false,
+    handshakeComplete: false
+  }; // Track handshake progress
 
   // Attack log helper
   function logAttack(message, level = "info") {
@@ -47,6 +53,13 @@ function createAttacker(config, ws) {
     receiverReady = false;
     lastFrameFromSender = null;
     lastFrameFromReceiver = null;
+    // Reset handshake state for new connection
+    handshakeState = {
+      senderHelloReceived: false,
+      receiverNegotiateReceived: false,
+      keyExchangeInProgress: false,
+      handshakeComplete: false
+    };
     logAttack(`[RECONNECT] Connection state reset - ready for new connection with any encryption mode`, "info");
   }
 
@@ -239,6 +252,14 @@ function createAttacker(config, ws) {
       senderFrameBuffer = [];
       // Reset encryption mode tracking for new connection (will be detected from HELLO frame)
       negotiatedEncMode = null;
+      // Reset handshake state for new connection
+      handshakeState = {
+        senderHelloReceived: false,
+        receiverNegotiateReceived: false,
+        keyExchangeInProgress: false,
+        handshakeComplete: false
+      };
+      logAttack(`[HANDSHAKE] Handshake state reset - waiting for new handshake sequence`, "info");
       // Don't reset receiverReady here - keep it if receiver is already connected
       
       // Use targetIp as the victim's IP (receiver that attacker proxies to)
@@ -328,37 +349,70 @@ function createAttacker(config, ws) {
           serverConn.connect(targetPort, forwardIp);
         });
         
-        // Receiver connection established
+        // Receiver connection established (after reconnection due to decryption changes)
         receiverReady = true;
-        logAttack(`[MITM] Successfully connected to receiver at ${forwardIp}:${targetPort}`, "success");
-        logAttack(`[MITM] Forwarding ${senderFrameBuffer.length} buffered frames`, "info");
+        logAttack(`[MITM] Successfully reconnected to receiver at ${forwardIp}:${targetPort}`, "success");
+        logAttack(`[RECONNECT] Receiver reconnected - new handshake will be established`, "info");
+        // Reset handshake state for new connection
+        handshakeState = {
+          senderHelloReceived: false,
+          receiverNegotiateReceived: false,
+          keyExchangeInProgress: false,
+          handshakeComplete: false
+        };
+        logAttack(`[HANDSHAKE] Handshake state reset - will track handshake completion after receiver reconnection`, "info");
         
-        // Forward all buffered frames to receiver
-        for (const bufferedFrame of senderFrameBuffer) {
-          await processAndForwardFrame(bufferedFrame, clientConn, serverConn, "sender->receiver");
+        if (senderFrameBuffer.length > 0) {
+          logAttack(`[MITM] Forwarding ${senderFrameBuffer.length} buffered frames from sender (may include handshake frames)`, "info");
+          
+          // Forward all buffered frames to receiver (handshake frames will be processed)
+          for (const bufferedFrame of senderFrameBuffer) {
+            await processAndForwardFrame(bufferedFrame, clientConn, serverConn, "sender->receiver");
+            // Check if handshake completed after forwarding this frame
+            if (handshakeState.handshakeComplete) {
+              logAttack(`[HANDSHAKE COMPLETE] ✓ Handshake completed after receiver reconnection during buffered frame forwarding`, "success");
+            }
+          }
+          senderFrameBuffer = []; // Clear buffer
+          
+          // Log handshake status if completed
+          if (handshakeState.handshakeComplete) {
+            const encModeName = negotiatedEncMode === ENC_MODES.PLAINTEXT ? "Plaintext" :
+                               negotiatedEncMode === ENC_MODES.AES_GCM ? "AES-GCM" :
+                               negotiatedEncMode === ENC_MODES.AES_CBC_HMAC ? "AES-CBC+HMAC" :
+                               negotiatedEncMode === ENC_MODES.DIFFIE_HELLMAN ? "Diffie-Hellman" :
+                               "Unknown";
+            logAttack(`[HANDSHAKE COMPLETE] ✓ Handshake successful after receiver reconnection - encryption mode: ${encModeName}`, "success");
+            logAttack(`[HANDSHAKE COMPLETE] Ready for message interception after receiver decryption settings change`, "success");
+          } else {
+            logAttack(`[HANDSHAKE] Handshake in progress after receiver reconnection - waiting for ACK from receiver`, "info");
+          }
+        } else {
+          logAttack(`[HANDSHAKE] No buffered frames - waiting for sender to send handshake frames`, "info");
         }
-        senderFrameBuffer = []; // Clear buffer
         
         // Set up error handlers for receiver connection
         serverConn.on("error", (err) => {
           logAttack(`[DISCONNECT] Receiver connection error: ${err.message}`, "failed");
-          logAttack(`[RECONNECT] Receiver disconnected. Will auto-reconnect when sender connects, or click 'Connect to Receiver' to reconnect now.`, "info");
+          logAttack(`[RECONNECT] Receiver disconnected (decryption settings may have changed). Will auto-reconnect when sender connects, or click 'Connect to Receiver' to reconnect now.`, "info");
+          logAttack(`[HANDSHAKE] Handshake state reset - new handshake will be required after reconnection`, "info");
           receiverReady = false;
           if (serverConn) {
             serverConn = null;
           }
-          // Reset encryption mode tracking
-          negotiatedEncMode = null;
+          // Reset all connection state including handshake for reconnection
+          resetConnectionState();
           sendUi(ws, { type: "error", error: `Receiver connection lost: ${err.message}. Will auto-reconnect on next sender connection.` });
         });
         
         serverConn.on("close", () => {
           logAttack("[DISCONNECT] Receiver connection closed", "warning");
-          logAttack(`[RECONNECT] Receiver disconnected. Will auto-reconnect when sender connects, or click 'Connect to Receiver' to reconnect now.`, "info");
+          logAttack(`[RECONNECT] Receiver disconnected (decryption settings may have changed). Will auto-reconnect when sender connects, or click 'Connect to Receiver' to reconnect now.`, "info");
+          logAttack(`[HANDSHAKE] Handshake state reset - new handshake will be required after reconnection`, "info");
           receiverReady = false;
           serverConn = null;
-          // Reset encryption mode tracking
-          negotiatedEncMode = null;
+          // Reset all connection state including handshake for reconnection
+          resetConnectionState();
           sendUi(ws, { type: "status", status: "Receiver connection closed. Will auto-reconnect when sender connects, or click 'Connect to Receiver' to reconnect now." });
         });
         
@@ -529,12 +583,14 @@ function createAttacker(config, ws) {
     const fromSender = direction === "sender->receiver";
     const fromReceiver = direction === "receiver->sender";
     
-    // Extract encryption mode from HELLO frame
-    if (frame.type === FRAME_TYPES.HELLO) {
+    // Track handshake progress and detect completion
+    if (frame.type === FRAME_TYPES.HELLO && fromSender) {
       try {
         const hello = JSON.parse(frame.payload.toString("utf8"));
         const previousEncMode = negotiatedEncMode;
         negotiatedEncMode = hello.encMode;
+        handshakeState.senderHelloReceived = true;
+        handshakeState.handshakeComplete = false; // Reset on new handshake
         const encModeName = negotiatedEncMode === ENC_MODES.PLAINTEXT ? "Plaintext" :
                            negotiatedEncMode === ENC_MODES.AES_GCM ? "AES-GCM" :
                            negotiatedEncMode === ENC_MODES.AES_CBC_HMAC ? "AES-CBC+HMAC" :
@@ -545,7 +601,7 @@ function createAttacker(config, ws) {
           logAttack(`[RECONNECT] Encryption mode changed: ${previousEncMode} → ${negotiatedEncMode} (${encModeName})`, "info");
           logAttack(`[RECONNECT] New connection established with updated encryption settings`, "success");
         } else {
-          logAttack(`[INTERCEPTION] Detected encryption mode: ${encModeName}`, "info");
+          logAttack(`[HANDSHAKE] HELLO received - encryption mode: ${encModeName}`, "info");
         }
         
         if (negotiatedEncMode !== ENC_MODES.PLAINTEXT) {
@@ -554,6 +610,37 @@ function createAttacker(config, ws) {
       } catch (e) {
         // Ignore parse errors
       }
+    } else if (frame.type === FRAME_TYPES.NEGOTIATE && fromReceiver) {
+      handshakeState.receiverNegotiateReceived = true;
+      logAttack(`[HANDSHAKE] NEGOTIATE received from receiver`, "info");
+    } else if (frame.type === FRAME_TYPES.KEY_EXCHANGE) {
+      handshakeState.keyExchangeInProgress = true;
+      if (fromSender) {
+        logAttack(`[HANDSHAKE] KEY_EXCHANGE received from sender`, "info");
+      } else {
+        logAttack(`[HANDSHAKE] KEY_EXCHANGE received from receiver`, "info");
+      }
+    } else if (frame.type === FRAME_TYPES.ACK && fromReceiver) {
+      // ACK from receiver indicates handshake is complete
+      const wasComplete = handshakeState.handshakeComplete;
+      handshakeState.handshakeComplete = true;
+      const encModeName = negotiatedEncMode === ENC_MODES.PLAINTEXT ? "Plaintext" :
+                         negotiatedEncMode === ENC_MODES.AES_GCM ? "AES-GCM" :
+                         negotiatedEncMode === ENC_MODES.AES_CBC_HMAC ? "AES-CBC+HMAC" :
+                         negotiatedEncMode === ENC_MODES.DIFFIE_HELLMAN ? "Diffie-Hellman" :
+                         negotiatedEncMode !== null ? `Mode ${negotiatedEncMode}` : "Unknown";
+      
+      if (!wasComplete) {
+        // First time handshake completes (may be after reconnection)
+        logAttack(`[HANDSHAKE COMPLETE] ✓ Handshake successful - encryption mode: ${encModeName}`, "success");
+        logAttack(`[HANDSHAKE COMPLETE] Sender and receiver are now ready to exchange messages`, "success");
+        logAttack(`[HANDSHAKE COMPLETE] ✓ Handshake completed - ready for message interception after reconnection`, "success");
+      }
+      sendUi(ws, { 
+        type: "handshakeStatus", 
+        complete: true, 
+        status: `MITM: Handshake complete - ${encModeName} mode active` 
+      });
     }
     
     // For passive mode, try to extract and display plaintext (only for DATA frames)
@@ -867,26 +954,37 @@ function createAttacker(config, ws) {
       receiverReady = true;
       logAttack(`[MITM] Successfully connected to receiver at ${forwardIp}:${targetPort}`, "success");
       logAttack(`[MITM] Ready to intercept sender connections`, "info");
+      logAttack(`[HANDSHAKE] Receiver connection established - handshake state reset`, "info");
+      logAttack(`[HANDSHAKE] Waiting for sender to connect and initiate handshake (will track handshake completion)`, "info");
+      // Reset handshake state for new connection
+      handshakeState = {
+        senderHelloReceived: false,
+        receiverNegotiateReceived: false,
+        keyExchangeInProgress: false,
+        handshakeComplete: false
+      };
       sendUi(ws, { type: "status", status: `Connected to receiver at ${forwardIp}:${targetPort}. Waiting for sender to connect...` });
       
       // Set up error handlers for receiver connection
         serverConn.on("error", (err) => {
           logAttack(`[DISCONNECT] Receiver connection error: ${err.message}`, "failed");
-          logAttack(`[RECONNECT] Receiver disconnected. Will auto-reconnect when sender connects, or click 'Connect to Receiver' to reconnect now.`, "info");
+          logAttack(`[RECONNECT] Receiver disconnected (decryption settings may have changed). Will auto-reconnect when sender connects, or click 'Connect to Receiver' to reconnect now.`, "info");
+          logAttack(`[HANDSHAKE] Handshake state reset - new handshake will be required after reconnection`, "info");
           receiverReady = false;
           serverConn = null;
-          // Reset encryption mode tracking
-          negotiatedEncMode = null;
+          // Reset all connection state including handshake for reconnection
+          resetConnectionState();
           sendUi(ws, { type: "error", error: `Receiver connection lost: ${err.message}. Will auto-reconnect on next sender connection.` });
         });
         
         serverConn.on("close", () => {
           logAttack("[DISCONNECT] Receiver connection closed", "warning");
-          logAttack(`[RECONNECT] Receiver disconnected. Will auto-reconnect when sender connects, or click 'Connect to Receiver' to reconnect now.`, "info");
+          logAttack(`[RECONNECT] Receiver disconnected (decryption settings may have changed). Will auto-reconnect when sender connects, or click 'Connect to Receiver' to reconnect now.`, "info");
+          logAttack(`[HANDSHAKE] Handshake state reset - new handshake will be required after reconnection`, "info");
           receiverReady = false;
           serverConn = null;
-          // Reset encryption mode tracking
-          negotiatedEncMode = null;
+          // Reset all connection state including handshake for reconnection
+          resetConnectionState();
           sendUi(ws, { type: "status", status: "Receiver connection closed. Will auto-reconnect when sender connects, or click 'Connect to Receiver' to reconnect now." });
         });
       

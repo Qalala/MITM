@@ -155,7 +155,7 @@ Components:
       * Educational demo of DH key exchange
       * Use for: Learning about key exchange vulnerabilities
   * Usage: Select mode that matches Receiver's Decryption Mode exactly
-  * Required: Must match Receiver's Decryption Mode exactly (not just supported, but the exact same mode)
+  * Required: Must match Receiver's Decryption Mode exactly (the exact same mode number)
 
 - Key Exchange Dropdown (#kx-mode)
   * Purpose: Select key exchange method

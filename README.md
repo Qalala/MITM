@@ -66,9 +66,9 @@ The UI dynamically shows/hides fields based on the selected encryption mode:
 - **Plaintext mode (0)**: Only the encryption mode dropdown is shown. Key exchange and PSK fields are hidden.
 - **Encrypted modes (1-3)**: Key exchange dropdown and PSK field are shown. PSK is required when using PSK key exchange.
 
-For Sender, you select the encryption mode. For Receiver, you select the decryption method. The Receiver will accept connections from Senders using any encryption mode that the Receiver supports. Downgrade attacks are prevented by:
-- Including the selected mode in the HELLO and NEGOTIATE transcript and requiring the mode to be in the Receiver's supported list.
-- Receiver will send `ERROR` and close if the Sender's mode is not in the Receiver's supported decryption methods.
+For Sender, you select the encryption mode. For Receiver, you select a single decryption mode that must match the Sender's encryption mode exactly. The Receiver will only accept connections from Senders using the exact same encryption mode. Downgrade attacks are prevented by:
+- Including the selected mode in the HELLO and NEGOTIATE transcript and requiring an exact mode match.
+- Receiver will send `ERROR` and close if the Sender's mode does not exactly match the Receiver's selected decryption mode.
 
 Supported modes:
 
@@ -176,7 +176,7 @@ These are prefilled in the UI. They should “just work” on a typical home/uni
    - Run `npm start`.
    - Visit `http://<laptop1-ip>:3000/` in a browser (or localhost).
    - Choose **Role: Receiver**, click **Set Role** (role selection disappears).
-   - Port: `12347`, Decryption Capabilities: check supported modes (e.g. Plaintext Mode 0 and/or AES‑GCM Mode 1).
+   - Port: `12347`, Decryption Mode: select a single mode (e.g. Plaintext Mode 0 or AES‑GCM Mode 1).
    - Status shows "Receiver listening".
 
 2. **Mobile – Attacker**
@@ -191,7 +191,7 @@ These are prefilled in the UI. They should “just work” on a typical home/uni
    - Visit `http://<laptop2-ip>:3000/` in a browser.
    - Choose **Role: Sender**, click **Set Role** (role selection disappears).
    - **Target IP**: `<android-ip>` (Attacker), Port: `12347`.
-   - Choose an encryption mode that Receiver supports and matching key exchange.
+   - Choose an encryption mode that exactly matches the Receiver's decryption mode and matching key exchange.
    - Click **Connect** button and then send messages from the chat input.
 
 ### Mobile ↔ Laptop ↔ Laptop permutations
@@ -199,7 +199,7 @@ These are prefilled in the UI. They should “just work” on a typical home/uni
 - You can swap roles freely as long as:
   - Sender's **target IP** points either to Receiver (no MITM) or Attacker (for MITM).
   - Receiver's listen IP/port stay at `0.0.0.0:12347`.
-  - Sender's encryption mode is one of the Receiver's supported decryption methods.
+  - Sender's encryption mode exactly matches the Receiver's selected decryption mode.
   - Key exchange configuration matches between Sender and Receiver.
 
 ---
@@ -208,7 +208,7 @@ These are prefilled in the UI. They should “just work” on a typical home/uni
 
 ### 1. Plaintext with successful MITM read/modify
 
-1. Receiver: Decryption Capabilities includes Mode 0 (Plaintext), PSK ignored.
+1. Receiver: Decryption Mode = 0 (Plaintext), PSK ignored.
 2. Attacker: Role Attacker, Mode **Modify**, set "Modify text" to something obvious (e.g. `HACKED`).
 3. Sender: Mode 0 (Plaintext), connects to Attacker IP.
 4. Sender sends "hello world".
@@ -218,7 +218,7 @@ These are prefilled in the UI. They should “just work” on a typical home/uni
 
 ### 2. AES‑GCM with integrity: MITM sees ciphertext, tampering fails
 
-1. Receiver: Decryption Capabilities includes Mode 1 (AES‑GCM), Key exchange = PSK, PSK = `demo-psk`.
+1. Receiver: Decryption Mode = 1 (AES‑GCM), Key exchange = PSK, PSK = `demo-psk`.
 2. Attacker: Mode **Modify** or **Replay**, still positioned as MITM.
 3. Sender: Mode 1 (AES‑GCM), Key exchange = PSK, same PSK `demo-psk`, connect to Attacker IP.
 4. Sender sends "hello secure".

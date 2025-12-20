@@ -449,3 +449,36 @@
 [2025-12-20T00:29:37.654Z] [sender] Connecting with encryption mode: 1, KX mode: rsa
 [2025-12-20T00:29:37.853Z] [sender] Connected to 192.168.1.7:12347, starting handshake
 [2025-12-20T00:29:37.906Z] [sender] Failed to connect: Expected NEGOTIATE frame
+[2025-12-20T01:05:12.326Z] [sender] Sender configured with encryption mode: 0, KX mode: psk
+[2025-12-20T01:05:21.210Z] [sender] Received encryption change broadcast: mode=0, kx=psk from receiver at 192.168.1.10
+[2025-12-20T01:05:36.011Z] [sender] Updated encryption mode to 0 from connect config
+[2025-12-20T01:05:36.012Z] [sender] Connecting with encryption mode: 0, KX mode: psk
+[2025-12-20T01:05:36.235Z] [sender] Connected to 192.168.1.7:12347, starting handshake
+[2025-12-20T01:05:36.307Z] [sender] Handshake complete, ready to send data
+[2025-12-20T01:05:46.789Z] [sender] SENT: i want
+[2025-12-20T01:06:01.322Z] [sender] SENT: hi
+[2025-12-20T01:06:19.001Z] [sender] SENT: hello
+[2025-12-20T01:06:34.828Z] [sender] SENT: byey
+[2025-12-20T01:06:55.319Z] [sender] SENT: hi
+[2025-12-20T01:07:05.165Z] [sender] Security config updated: encryption mode changed from 0 to 1
+[2025-12-20T01:07:05.166Z] [sender] ⚠ Security settings changed (encryption mode: 0 → 1). Closing connection.
+[2025-12-20T01:07:05.169Z] [sender] Background receive error: Premature close
+[2025-12-20T01:07:09.132Z] [sender] Security config updated: key exchange mode changed from psk to rsa
+[2025-12-20T01:07:09.133Z] [sender] Security settings updated (key exchange: psk → rsa).
+[2025-12-20T01:07:13.367Z] [sender] Security config updated: PSK updated
+[2025-12-20T01:07:13.367Z] [sender] Security settings updated (PSK updated).
+[2025-12-20T01:07:17.777Z] [sender] Received encryption change broadcast: mode=1, kx=psk from receiver at 192.168.1.10
+[2025-12-20T01:07:19.865Z] [sender] Received encryption change broadcast: mode=1, kx=rsa from receiver at 192.168.1.10
+[2025-12-20T01:07:26.635Z] [sender] Updated encryption mode to 1 from connect config
+[2025-12-20T01:07:26.635Z] [sender] Connecting with encryption mode: 1, KX mode: rsa
+[2025-12-20T01:07:26.639Z] [sender] Connected to 192.168.1.7:12347, starting handshake
+[2025-12-20T01:08:14.248Z] [sender] Security config updated: encryption mode changed from 1 to 3
+[2025-12-20T01:08:14.248Z] [sender] Security settings updated (encryption mode: 1 → 3).
+[2025-12-20T01:08:16.248Z] [sender] Security config updated: key exchange mode changed from rsa to dh
+[2025-12-20T01:08:16.248Z] [sender] Security settings updated (key exchange: rsa → dh).
+[2025-12-20T01:08:21.358Z] [sender] Received encryption change broadcast: mode=3, kx=rsa from receiver at 192.168.1.10
+[2025-12-20T01:08:23.332Z] [sender] Received encryption change broadcast: mode=3, kx=dh from receiver at 192.168.1.10
+[2025-12-20T01:08:26.434Z] [sender] Updated encryption mode to 3 from connect config
+[2025-12-20T01:08:26.435Z] [sender] Connecting with encryption mode: 3, KX mode: dh
+[2025-12-20T01:08:26.436Z] [sender] Failed to connect: Premature close
+[2025-12-20T01:08:26.646Z] [sender] Connected to 192.168.1.7:12347, starting handshake
