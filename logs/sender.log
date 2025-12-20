@@ -414,3 +414,13 @@
 [2025-12-19T23:48:22.285Z] [sender] Connecting with encryption mode: 0, KX mode: psk
 [2025-12-19T23:48:22.290Z] [sender] Connected to 192.168.1.10:12347, starting handshake
 [2025-12-19T23:48:22.348Z] [sender] Handshake complete, ready to send data
+[2025-12-20T00:05:38.871Z] [sender] Sender configured with encryption mode: 0, KX mode: psk
+[2025-12-20T00:05:43.912Z] [sender] Received encryption change broadcast: mode=0, kx=psk from receiver at 192.168.1.10
+[2025-12-20T00:05:55.168Z] [sender] Updated encryption mode to 0 from connect config
+[2025-12-20T00:05:55.168Z] [sender] Connecting with encryption mode: 0, KX mode: psk
+[2025-12-20T00:05:55.173Z] [sender] Connected to 192.168.1.7:12347, starting handshake
+[2025-12-20T00:05:55.197Z] [sender] Failed to connect: read ECONNRESET
+[2025-12-20T00:06:13.745Z] [sender] Updated encryption mode to 0 from connect config
+[2025-12-20T00:06:13.745Z] [sender] Connecting with encryption mode: 0, KX mode: psk
+[2025-12-20T00:06:13.860Z] [sender] Connected to 192.168.1.7:12347, starting handshake
+[2025-12-20T00:06:13.874Z] [sender] Failed to connect: read ECONNRESET

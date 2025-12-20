@@ -77,14 +77,22 @@ function createAttacker(config, ws) {
           }
           // Don't close serverConn here - keep receiver connection if it exists
           
-          // Prevent concurrent handling
+          // Prevent concurrent handling - but allow if previous connection is dead
           if (isHandlingClient) {
-            logAttack("New connection rejected: already handling a connection", "warning");
-            try {
-              c.end();
-              c.destroy();
-            } catch {}
-            return;
+            // Check if previous connection is still valid
+            if (clientConn && !clientConn.destroyed) {
+              logAttack("New connection rejected: already handling a connection", "warning");
+              try {
+                c.end();
+                c.destroy();
+              } catch {}
+              return;
+            } else {
+              // Previous connection is dead, reset flag and allow new connection
+              logAttack("Previous connection dead, accepting new connection", "info");
+              isHandlingClient = false;
+              clientConn = null;
+            }
           }
           
           clientConn = c;
@@ -102,9 +110,8 @@ function createAttacker(config, ws) {
               console.error("Attacker error logging failed:", logError);
               console.error("Original error:", e);
             }
-          }).finally(() => {
-            isHandlingClient = false;
           });
+          // Note: isHandlingClient is reset in handleNewClient's finally block
         } catch (e) {
           // Catch any errors in the connection handler itself
           try {
@@ -167,19 +174,17 @@ function createAttacker(config, ws) {
 
   async function handleNewClient() {
     try {
-      // Clean up previous connections if any
-      if (clientConn && clientConn !== server.connections?.[0]) {
+      // Clean up previous client connection if any (but keep serverConn if receiver is already connected)
+      if (clientConn && !clientConn.destroyed) {
         try {
-          clientConn.end();
-          clientConn.destroy();
+          // Only close if it's a different connection
+          if (clientConn !== server.connections?.[0]) {
+            clientConn.end();
+            clientConn.destroy();
+          }
         } catch {}
       }
-      if (serverConn) {
-        try {
-          serverConn.end();
-          serverConn.destroy();
-        } catch {}
-      }
+      // Don't close serverConn here - keep receiver connection if it exists
       
       // Reset state for new connection
       senderFrameBuffer = [];
@@ -192,11 +197,19 @@ function createAttacker(config, ws) {
         logUi(ws, "attacker", "ERROR: Victim IP (target IP) not configured. Please enter victim's IP address.");
         sendUi(ws, { type: "error", error: "Victim IP (target IP) not configured. Please enter the victim's IP address in Target IP field." });
         try {
-          if (clientConn) {
+          if (clientConn && !clientConn.destroyed) {
             clientConn.end();
             clientConn.destroy();
           }
         } catch {}
+        clientConn = null;
+        isHandlingClient = false;
+        return;
+      }
+      
+      // Ensure clientConn is valid before proceeding
+      if (!clientConn || clientConn.destroyed) {
+        logAttack(`[MITM] Client connection invalid or destroyed`, "warning");
         clientConn = null;
         isHandlingClient = false;
         return;
@@ -248,7 +261,11 @@ function createAttacker(config, ws) {
           });
           serverConn.once("connect", () => {
             clearTimeout(timeout);
-            serverConn.removeAllListeners("error");
+            if (serverConn && !serverConn.destroyed) {
+              try {
+                serverConn.removeAllListeners("error");
+              } catch {}
+            }
             resolve();
           });
           serverConn.connect(targetPort, forwardIp);
@@ -351,22 +368,22 @@ function createAttacker(config, ws) {
 
       // Add error and close handlers to detect connection failures
       const cleanupConnections = () => {
-        if (clientConn) {
+        if (clientConn && !clientConn.destroyed) {
           try {
             clientConn.removeAllListeners();
             clientConn.end();
             clientConn.destroy();
           } catch {}
-          clientConn = null;
         }
-        if (serverConn) {
+        clientConn = null;
+        if (serverConn && !serverConn.destroyed) {
           try {
             serverConn.removeAllListeners();
             serverConn.end();
             serverConn.destroy();
           } catch {}
-          serverConn = null;
         }
+        serverConn = null;
         isHandlingClient = false;
       };
 
@@ -408,14 +425,16 @@ function createAttacker(config, ws) {
         console.error("Original error:", e);
       }
       
-      // Clean up on error
+      // Clean up on error - ensure flag is always reset
       try {
-        if (clientConn) {
+        if (clientConn && !clientConn.destroyed) {
           clientConn.end();
           clientConn.destroy();
         }
       } catch {}
       clientConn = null;
+    } finally {
+      // Always reset the flag, even if there was an error
       isHandlingClient = false;
     }
   }
@@ -697,7 +716,11 @@ function createAttacker(config, ws) {
         });
         serverConn.once("connect", () => {
           clearTimeout(timeout);
-          serverConn.removeAllListeners("error");
+          if (serverConn && !serverConn.destroyed) {
+            try {
+              serverConn.removeAllListeners("error");
+            } catch {}
+          }
           resolve();
         });
         serverConn.connect(targetPort, forwardIp);
@@ -826,20 +849,20 @@ function createAttacker(config, ws) {
     attackActive = false;
     isHandlingClient = false;
     try {
-      if (clientConn) {
+      if (clientConn && !clientConn.destroyed) {
         clientConn.removeAllListeners();
         clientConn.end();
         clientConn.destroy();
-        clientConn = null;
       }
+      clientConn = null;
     } catch {}
     try {
-      if (serverConn) {
+      if (serverConn && !serverConn.destroyed) {
         serverConn.removeAllListeners();
         serverConn.end();
         serverConn.destroy();
-        serverConn = null;
       }
+      serverConn = null;
     } catch {}
     try {
       if (server) {
