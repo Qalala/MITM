@@ -8,6 +8,15 @@ The stack is:
 
 This satisfies the requirement for a backend that can run on laptops or on Android (via Termux + Node) while the UI runs in the browser.
 
+
+## Tech stack
+- Node.js
+- Express
+- WebSocket (`ws`)
+- TCP sockets (Sender / Receiver / MITM proxy)
+- Cryptography: AES-256-GCM, AES-256-CBC + HMAC-SHA256, RSA-OAEP, Diffie-Hellman
+- HTML / CSS / JavaScript (browser UI)
+- Optional: Termux on Android for mobile Node hosting
 ### Architecture (high level)
 
 ```
